@@ -1,0 +1,58 @@
+const [value1, setValue] = useState()
+<input onChange((e) => setValue(e target value))>
+
+
+
+import { useState } from "react"
+
+export default function App1() {
+  
+  const constantVariable = "Sample Name"
+  const propVariable = {
+    height: 10,
+    weight: 20,
+    color: "cyan",
+    forSale: true
+  }
+
+  const [value1, setValue1] = useState(1)
+  const [value2, setValue2] = useState(2)
+  const [value3, setValue3] = useState(3)
+  const [operator, setOperator] = useState('+')
+  const [varName, funcToChangeVar] = useState(10)
+
+    return (
+         <div className="overall">
+         <div className="top">
+         <h1 style={{color: propVariable.color}}>
+         {varName}   
+         </h1>
+         </div>
+
+         <div className="sub">
+
+         <div className="left" onClick={() => funcToChangeVar(varName / 2)}>
+         <h1>DIVIDE</h1>
+         </div>
+           
+         <div className="right" onClick={() => funcToChangeVar(varName * 2)}>
+         <h1>MULTIPLY</h1>
+         </div>
+         
+         </div>
+          <div className="bottom">
+         <h1>ADD</h1>
+         </div>        
+
+         <div className="topleft">
+          <h1>SUBTRACT</h1>
+         </div>
+                         
+    </div>
+
+    
+  )
+}
+
+//const [value1, setValue] = useState()
+//<input onChange((e) => setValue(e target value))>
