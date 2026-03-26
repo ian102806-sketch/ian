@@ -69,7 +69,7 @@ return (
 padding: "20px",
 fontFamily: "Arial"
 }}>
-<h1>TODO LIST</h1>
+
 {/* INPUT FIELD */}
 <input
 value={input} // current value
