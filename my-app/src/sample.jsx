@@ -1,5 +1,5 @@
 import { useState } from "react";
-
+/*
 export default function App1() {
   const [tasks, setTasks] = useState([
     { id: 1, title: "Setup Project", desc: "Initialize React App", status: "Finished", dep: null }
@@ -44,7 +44,7 @@ export default function App1() {
         <p style={{ color: '#6b7280' }}>Simple to-do-list web.</p>
       </header>
 
-      {/* New Task Creator */}
+      { New Task Creator }
       <div style={{ display: 'grid', gridTemplateColumns: '2fr 2fr 1.5fr auto', gap: '12px', background: '#fff', padding: '20px', borderRadius: '16px', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', marginBottom: '40px', border: '1px solid #f3f4f6' }}>
         <input style={inputStyle} placeholder="Task name..." value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} />
         <input style={inputStyle} placeholder="What is the task all about?" value={form.desc} onChange={e => setForm({ ...form, desc: e.target.value })} />
@@ -55,7 +55,7 @@ export default function App1() {
         <button onClick={addTask} style={buttonStyle}>Add Task</button>
       </div>
 
-      {/* Task Grid */}
+      { Task Grid }
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '20px' }}>
         {tasks.map(t => {
           const parentTask = tasks.find(p => p.id === t.dep);
@@ -87,7 +87,7 @@ export default function App1() {
                 {isFinished ? <span>🏁</span> : (isBlocked && <span>🔒</span>)}
               </div>
 
-              {/* EDITABLE TITLE */}
+              { EDITABLE TITLE }
               <input 
                 value={t.title}
                 onChange={(e) => updateTaskContent(t.id, 'title', e.target.value)}
@@ -106,7 +106,7 @@ export default function App1() {
                 </div>
               )}
 
-              {/* EDITABLE DESCRIPTION */}
+              { EDITABLE DESCRIPTION }
               <textarea 
                 value={t.desc}
                 onChange={(e) => updateTaskContent(t.id, 'desc', e.target.value)}
@@ -151,4 +151,6 @@ export default function App1() {
 }
 
 const inputStyle = { padding: '10px 14px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '0.9rem', outline: 'none' };
-const buttonStyle = { backgroundColor: '#2563eb', color: 'white', border: 'none', padding: '10px 24px', borderRadius: '8px', fontWeight: '600', cursor: 'pointer' };
+const buttonStyle = { backgroundColor: '#2563eb', color: 'white', border: 'none', padding: '10px 24px', borderRadius: '8px', fontWeight: '600', cursor: 'pointer' };*/
+
+
