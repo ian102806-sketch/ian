@@ -13,7 +13,6 @@ export default function App() {
   const [dateFilter, setDateFilter] = useState('');
   const [userSearch, setUserSearch] = useState('');
 
-  // UI Styles with forced dark text colors
   const s = {
     container: { backgroundColor: '#f8fafc', minHeight: '100vh', width: '100vw', display: 'flex', justifyContent: 'center', fontFamily: 'system-ui, sans-serif' },
     wrapper: { width: '100%', maxWidth: '1100px', padding: '40px 20px' },
@@ -23,7 +22,6 @@ export default function App() {
     btnAdmin: { padding: '12px 24px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontWeight: 'bold', background: '#ef4444', color: 'white' },
     btnDelete: { background: '#fee2e2', color: '#ef4444', border: 'none', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold' },
     tableHeader: { background: '#f1f5f9', padding: '15px', textAlign: 'left', color: '#475569', fontSize: '12px', fontWeight: '800' },
-    // FIXED: Explicitly set text to dark slate (#1e293b)
     td: { padding: '16px', borderBottom: '1px solid #f1f5f9', fontSize: '14px', color: '#1e293b' },
     badge: (color) => ({ padding: '4px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: '700', backgroundColor: color, color: 'white' })
   };
@@ -44,23 +42,54 @@ export default function App() {
     return () => authListener.subscription.unsubscribe();
   }, []);
 
+  // FIXED: Changed 'created_at' to 'time_in'
   async function fetchAttendance(userId) {
-    const { data } = await supabase.from('attendance').select('*').eq('user_id', userId).order('created_at', { ascending: false });
+    const { data, error } = await supabase
+      .from('attendance')
+      .select('*')
+      .eq('user_id', userId)
+      .order('time_in', { ascending: false });
+
+    if (error) {
+      console.error("Fetch Error:", error.message);
+      return;
+    }
+    
     setLogs(data || []);
     const today = new Date().toISOString().split('T')[0];
     setTodayRecord(data?.find(r => r.date === today && !r.time_out));
   }
 
+  // FIXED: Changed 'created_at' to 'time_in'
   async function fetchAllRecords() {
-    const { data } = await supabase.from('attendance').select('*').order('created_at', { ascending: false });
+    const { data, error } = await supabase
+      .from('attendance')
+      .select('*')
+      .order('time_in', { ascending: false });
+
+    if (error) {
+      console.error("Admin Fetch Error:", error.message);
+      return;
+    }
     setAllRecords(data || []);
   }
 
   const handleAttendance = async () => {
+    const now = new Date().toISOString();
+    const today = now.split('T')[0];
+
     if (!todayRecord) {
-      await supabase.from('attendance').insert([{ user_id: user.id }]);
+      // TIME IN
+      const { error } = await supabase.from('attendance').insert([
+        { user_id: user.id, date: today, time_in: now }
+      ]);
+      if (error) alert(error.message);
     } else {
-      await supabase.from('attendance').update({ time_out: new Date().toISOString() }).eq('id', todayRecord.id);
+      // TIME OUT
+      const { error } = await supabase.from('attendance')
+        .update({ time_out: now })
+        .eq('id', todayRecord.id);
+      if (error) alert(error.message);
     }
     fetchAttendance(user.id);
   };
@@ -88,7 +117,7 @@ export default function App() {
           </div>
         ) : (
           <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px', alignItems: 'center' }}>
               <div style={{color: '#1e293b'}}>Logged in as: <b>{user.email}</b></div>
               <div style={{ display: 'flex', gap: '10px' }}>
                 <button onClick={() => setView('user')} style={s.btnPrimary}>My Logs</button>
@@ -112,13 +141,13 @@ export default function App() {
                       <tr><th style={s.tableHeader}>Date</th><th style={s.tableHeader}>In</th><th style={s.tableHeader}>Out</th></tr>
                     </thead>
                     <tbody>
-                      {logs.map(log => (
+                      {logs.length > 0 ? logs.map(log => (
                         <tr key={log.id}>
                           <td style={s.td}>{log.date}</td>
                           <td style={s.td}>{new Date(log.time_in).toLocaleTimeString()}</td>
                           <td style={s.td}>{log.time_out ? new Date(log.time_out).toLocaleTimeString() : <span style={s.badge('#10b981')}>ACTIVE</span>}</td>
                         </tr>
-                      ))}
+                      )) : <tr><td colSpan="3" style={{...s.td, textAlign: 'center'}}>No logs found.</td></tr>}
                     </tbody>
                   </table>
                 </div>
@@ -141,7 +170,7 @@ export default function App() {
                     </tr>
                   </thead>
                   <tbody>
-                    {allRecords.filter(r => (dateFilter === '' || r.date === dateFilter) && (userSearch === '' || r.user_id.includes(userSearch))).map(rec => (
+                    {allRecords.filter(r => (dateFilter === '' || r.date === dateFilter) && (userSearch === '' || r.user_id.toLowerCase().includes(userSearch.toLowerCase()))).map(rec => (
                       <tr key={rec.id}>
                         <td style={{...s.td, fontSize: '10px'}}>{rec.user_id}</td>
                         <td style={s.td}>{rec.date}</td>
