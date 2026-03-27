@@ -21,12 +21,11 @@ export default function App() {
     input: { padding: '12px', borderRadius: '10px', border: '1px solid #cbd5e1', fontSize: '14px', width: '100%', marginBottom: '10px', boxSizing: 'border-box' },
     btnPrimary: { padding: '12px 24px', borderRadius: '10px', border: 'none', cursor: 'pointer', fontWeight: 'bold', background: '#2563eb', color: 'white' },
     btnAdmin: { padding: '12px 24px', borderRadius: '10px', border: 'none', cursor: 'pointer', fontWeight: 'bold', background: '#ef4444', color: 'white' },
-    // STYLED: Rounded attendance button
-    btnAttendance: { padding: '20px', borderRadius: '15px', border: 'none', cursor: 'pointer', fontWeight: 'bold', fontSize: '1.2rem', color: 'white', width: '100%', transition: '0.2s' },
+    btnAttendance: { padding: '20px', borderRadius: '15px', border: 'none', cursor: 'pointer', fontWeight: 'bold', fontSize: '1.2rem', color: 'white', width: '100%' },
     tableHeader: { background: '#f1f5f9', padding: '15px', textAlign: 'left', color: '#475569', fontSize: '12px', fontWeight: '800', textTransform: 'uppercase' },
-    td: { padding: '16px', borderBottom: '1px solid #f1f5f9', fontSize: '14px', color: '#1e293b' },
-    userLabel: { background: '#1e293b', padding: '12px 20px', borderRadius: '12px', fontSize: '14px', color: '#fff', marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
-    toast: { position: 'fixed', top: '20px', right: '20px', padding: '15px 25px', borderRadius: '10px', color: 'white', fontWeight: 'bold', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', zIndex: 1000 }
+    td: { padding: '16px', borderBottom: '1px solid #f1f5f9', fontSize: '14px' },
+    userHeader: { background: '#1e293b', padding: '15px 25px', borderRadius: '12px', color: '#fff', marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
+    toast: { position: 'fixed', top: '20px', right: '20px', padding: '15px 25px', borderRadius: '10px', color: 'white', fontWeight: 'bold', zIndex: 1000 }
   };
 
   const showToast = (msg, type = 'success') => {
@@ -34,37 +33,40 @@ export default function App() {
     setTimeout(() => setNotification({ show: false, message: '', type: 'success' }), 3000);
   };
 
-  const fetchUserLogs = useCallback(async (userId) => {
-    const { data, error } = await supabase
+  // 🛠️ COMBINED FETCH LOGIC: Ensures both personal and admin data load correctly
+  const refreshData = useCallback(async (currentUser) => {
+    if (!currentUser) return;
+
+    // 1. Fetch Personal Logs
+    const { data: userData, error: userError } = await supabase
       .from('attendance')
       .select('*')
-      .eq('user_id', userId)
+      .eq('user_id', currentUser.id)
       .order('created_at', { ascending: false });
     
-    if (error) {
-      console.error("Personal log error:", error.message);
-    } else {
-      setLogs(data || []);
+    if (!userError) {
+      setLogs(userData || []);
       const today = new Date().toISOString().split('T')[0];
-      const activeShift = data?.find(r => r.date === today && !r.time_out);
-      setTodayRecord(activeShift || null);
+      // Find active shift: Today's date AND no time_out yet
+      const active = userData?.find(r => r.date === today && !r.time_out);
+      setTodayRecord(active || null);
     }
-  }, []);
 
-  const fetchAllRecords = useCallback(async () => {
-    const { data, error } = await supabase
-      .from('attendance')
-      .select('*, profiles:user_id(id)')
-      .order('date', { ascending: false });
-    
-    if (!error) setAllRecords(data || []);
+    // 2. Fetch Admin Logs (if user is admin)
+    if (currentUser.email === 'admin@test.com') {
+      const { data: adminData } = await supabase
+        .from('attendance')
+        .select('*, profiles:user_id(id)')
+        .order('created_at', { ascending: false });
+      setAllRecords(adminData || []);
+    }
   }, []);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
         setUser(session.user);
-        fetchUserLogs(session.user.id);
+        refreshData(session.user);
       }
       setLoading(false);
     });
@@ -72,28 +74,36 @@ export default function App() {
     const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
       if (session?.user) {
         setUser(session.user);
-        fetchUserLogs(session.user.id);
+        refreshData(session.user);
       } else {
         setUser(null);
         setLogs([]);
+        setTodayRecord(null);
       }
     });
     return () => authListener.subscription.unsubscribe();
-  }, [fetchUserLogs]);
-
-  useEffect(() => {
-    if (view === 'admin') fetchAllRecords();
-  }, [view, fetchAllRecords]);
+  }, [refreshData]);
 
   const handleAttendance = async () => {
-    if (!todayRecord) {
-      const { error } = await supabase.from('attendance').insert([{ user_id: user.id }]);
-      if (!error) showToast("Clocked In Successfully! 🟢");
-    } else {
-      const { error } = await supabase.from('attendance').update({ time_out: new Date().toISOString() }).eq('id', todayRecord.id);
-      if (!error) showToast("Clocked Out Successfully! 🔴");
+    try {
+      if (!todayRecord) {
+        // TIME IN
+        const { error } = await supabase.from('attendance').insert([{ user_id: user.id }]);
+        if (error) throw error;
+        showToast("Logged In! 🟢");
+      } else {
+        // TIME OUT
+        const { error } = await supabase
+          .from('attendance')
+          .update({ time_out: new Date().toISOString() })
+          .eq('id', todayRecord.id);
+        if (error) throw error;
+        showToast("Logged Out! 🔴");
+      }
+      refreshData(user); // Reload UI immediately
+    } catch (err) {
+      showToast(err.message, "error");
     }
-    fetchUserLogs(user.id);
   };
 
   const filteredRecords = allRecords.filter(rec => {
@@ -103,7 +113,7 @@ export default function App() {
     return matchesSearch && matchesDate;
   });
 
-  if (loading) return <div style={s.container}>Loading...</div>;
+  if (loading) return <div style={s.container}>Loading WorkLog...</div>;
 
   return (
     <div style={s.container}>
@@ -117,18 +127,24 @@ export default function App() {
         {!user ? (
           <div style={{ display: 'grid', placeItems: 'center', height: '60vh' }}>
             <div style={s.card}>
-              <h1 style={{ textAlign: 'center' }}>WorkLog</h1>
+              <h1 style={{ textAlign: 'center', marginBottom: '25px' }}>WorkLog</h1>
               <input style={s.input} placeholder="Email" onChange={e => setEmail(e.target.value)} />
               <input style={s.input} type="password" placeholder="Password" onChange={e => setPassword(e.target.value)} />
-              <button style={{ ...s.btnPrimary, width: '100%', marginBottom: '10px' }} onClick={() => supabase.auth.signInWithPassword({ email, password })}>Login</button>
-              <button style={{ background: 'none', border: 'none', color: '#2563eb', cursor: 'pointer', width: '100%' }} onClick={() => supabase.auth.signUp({ email, password })}>Register</button>
+              <button style={{ ...s.btnPrimary, width: '100%', marginBottom: '10px' }} onClick={() => handleAuth('login')}>Login</button>
+              <button style={{ background: 'none', border: 'none', color: '#2563eb', cursor: 'pointer', width: '100%' }} onClick={() => handleAuth('signup')}>Register</button>
             </div>
           </div>
         ) : (
           <div>
-            <div style={s.userLabel}>
-              <span>👤 User: <strong>{user.email}</strong></span>
-              <button onClick={() => supabase.auth.signOut()} style={{ background: '#ef4444', color: 'white', border: 'none', padding: '6px 15px', borderRadius: '8px', cursor: 'pointer' }}>Logout</button>
+            <div style={s.userHeader}>
+              <div>
+                <div style={{ fontSize: '12px', opacity: 0.8 }}>Logged in as:</div>
+                <div style={{ fontWeight: 'bold' }}>{user.email}</div>
+              </div>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button onClick={() => refreshData(user)} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', padding: '5px 10px', borderRadius: '5px', cursor: 'pointer' }}>🔄 Refresh</button>
+                <button onClick={() => supabase.auth.signOut()} style={{ background: '#ef4444', color: 'white', border: 'none', padding: '5px 15px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>Logout</button>
+              </div>
             </div>
 
             <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
@@ -138,10 +154,10 @@ export default function App() {
 
             {view === 'admin' ? (
               <div style={s.card}>
-                <h2>Admin Logs</h2>
+                <h2 style={{ color: '#ef4444', marginTop: 0 }}>Admin: System Logs</h2>
                 <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
                   <input type="date" style={s.input} value={dateFilter} onChange={e => setDateFilter(e.target.value)} />
-                  <input type="text" style={s.input} placeholder="User #" value={userSearch} onChange={e => setUserSearch(e.target.value)} />
+                  <input type="text" style={s.input} placeholder="Search User #" value={userSearch} onChange={e => setUserSearch(e.target.value)} />
                 </div>
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
@@ -162,16 +178,22 @@ export default function App() {
             ) : (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px' }}>
                 <div style={s.card}>
-                  <h3>Clock In/Out</h3>
+                  <h3 style={{ marginTop: 0 }}>Attendance</h3>
                   <button 
                     onClick={handleAttendance} 
                     style={{ ...s.btnAttendance, background: todayRecord ? '#f59e0b' : '#10b981' }}
                   >
                     {todayRecord ? 'TIME OUT' : 'TIME IN'}
                   </button>
+                  {todayRecord && (
+                    <div style={{ textAlign: 'center', marginTop: '15px', color: '#64748b', fontSize: '14px' }}>
+                      🟢 Active shift started at <b>{new Date(todayRecord.time_in).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</b>
+                    </div>
+                  )}
                 </div>
+
                 <div style={s.card}>
-                  <h3>My History</h3>
+                  <h3 style={{ marginTop: 0 }}>Personal History</h3>
                   <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead>
                       <tr><th style={s.tableHeader}>Date</th><th style={s.tableHeader}>In</th><th style={s.tableHeader}>Out</th></tr>
@@ -181,10 +203,10 @@ export default function App() {
                         <tr key={log.id}>
                           <td style={s.td}>{log.date}</td>
                           <td style={s.td}>{new Date(log.time_in).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</td>
-                          <td style={s.td}>{log.time_out ? new Date(log.time_out).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Active'}</td>
+                          <td style={s.td}>{log.time_out ? new Date(log.time_out).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : <span style={{color: '#10b981', fontWeight: 'bold'}}>Active</span>}</td>
                         </tr>
                       )) : (
-                        <tr><td colSpan="3" style={{...s.td, textAlign: 'center'}}>No personal logs yet.</td></tr>
+                        <tr><td colSpan="3" style={{...s.td, textAlign: 'center', color: '#94a3b8'}}>No history found for this account.</td></tr>
                       )}
                     </tbody>
                   </table>
