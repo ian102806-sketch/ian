@@ -13,13 +13,17 @@ export default function App() {
   const [dateFilter, setDateFilter] = useState('');
   const [userSearch, setUserSearch] = useState('');
 
-  // Styles Object
+  // Reusable Modern Styles
   const s = {
-    card: { background: 'white', padding: '24px', borderRadius: '12px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)', marginBottom: '20px' },
-    btn: { padding: '10px 20px', borderRadius: '6px', border: 'none', cursor: 'pointer', fontWeight: '600', transition: '0.2s' },
-    input: { padding: '12px', borderRadius: '6px', border: '1px solid #ddd', fontSize: '16px', outline: 'none' },
-    tableHeader: { background: '#f8fafc', padding: '12px', textAlign: 'left', borderBottom: '2px solid #e2e8f0', color: '#64748b', fontSize: '14px' },
-    badge: (color) => ({ padding: '4px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: '700', backgroundColor: color, color: 'white' })
+    container: { backgroundColor: '#f8fafc', minHeight: '100vh', width: '100vw', display: 'flex', justifyContent: 'center', fontFamily: 'system-ui, -apple-system, sans-serif' },
+    wrapper: { width: '100%', maxWidth: '1100px', padding: '40px 20px' },
+    card: { background: 'white', padding: '30px', borderRadius: '16px', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.05)', marginBottom: '24px', border: '1px solid #e2e8f0' },
+    input: { padding: '14px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '16px', width: '100%', boxSizing: 'border-box', outline: 'none' },
+    btnPrimary: { padding: '14px 24px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontWeight: 'bold', background: '#2563eb', color: 'white', transition: '0.2s' },
+    btnAdmin: { padding: '10px 20px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontWeight: 'bold', background: '#ef4444', color: 'white' },
+    tableHeader: { background: '#f1f5f9', padding: '15px', textAlign: 'left', color: '#475569', fontSize: '13px', fontWeight: '700', textTransform: 'uppercase' },
+    badge: (color) => ({ padding: '6px 12px', borderRadius: '50px', fontSize: '11px', fontWeight: '800', backgroundColor: color, color: 'white' }),
+    spinner: { width: '40px', height: '40px', border: '4px solid #f3f3f3', borderTop: '4px solid #2563eb', borderRadius: '50%', animation: 'spin 1s linear infinite' }
   };
 
   useEffect(() => {
@@ -52,10 +56,12 @@ export default function App() {
   }
 
   const handleAuth = async (type) => {
+    setLoading(true);
     const { error } = type === 'login' 
       ? await supabase.auth.signInWithPassword({ email, password })
       : await supabase.auth.signUp({ email, password });
-    if (error) alert(error.message);
+    if (error) { alert(error.message); setLoading(false); }
+    else if (type === 'signup') { alert("Success! You can now log in."); setLoading(false); }
   };
 
   const handleTimeIn = async () => {
@@ -73,110 +79,136 @@ export default function App() {
     return (dateFilter === '' || rec.date === dateFilter) && (userSearch === '' || rec.user_id.toLowerCase().includes(userSearch.toLowerCase()));
   });
 
-  const isAdmin = user?.email === 'admin@test.com'; // CHANGE THIS TO YOUR EMAIL
+  // 🚨 IMPORTANT: Replace with your actual email
+  const isAdmin = user?.email === 'admin@test.com'; 
 
-  if (loading) return <div style={{ display: 'grid', placeItems: 'center', height: '100vh' }}>Loading...</div>;
+  if (loading) return (
+    <div style={{ ...s.container, alignItems: 'center', justifyContent: 'center', flexDirection: 'column' }}>
+      <style>{`@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
+      <div style={s.spinner}></div>
+      <p style={{ marginTop: '15px', color: '#64748b' }}>Connecting to Database...</p>
+    </div>
+  );
 
   return (
-    <div style={{ backgroundColor: '#f1f5f9', minHeight: '100vh', padding: '20px', fontFamily: 'Inter, system-ui, sans-serif' }}>
-      <div style={{ maxWidth: '1000px', margin: '0 auto' }}>
+    <div style={s.container}>
+      <div style={s.wrapper}>
         
         {!user ? (
           /* --- LOGIN UI --- */
-          <div style={{ ...s.card, maxWidth: '400px', margin: '100px auto', textAlign: 'center' }}>
-            <h2 style={{ marginBottom: '24px', color: '#1e293b' }}>Attendance Tracker</h2>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <input style={s.input} type="email" placeholder="Email" onChange={(e) => setEmail(e.target.value)} />
-              <input style={s.input} type="password" placeholder="Password" onChange={(e) => setPassword(e.target.value)} />
-              <button onClick={() => handleAuth('login')} style={{ ...s.btn, background: '#2563eb', color: 'white' }}>Login</button>
-              <button onClick={() => handleAuth('signup')} style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer' }}>Create Account</button>
+          <div style={{ display: 'grid', placeItems: 'center', height: '80vh' }}>
+            <div style={{ ...s.card, width: '100%', maxWidth: '420px', textAlign: 'center' }}>
+              <div style={{ fontSize: '40px', marginBottom: '10px' }}>⏱️</div>
+              <h1 style={{ marginBottom: '8px', color: '#0f172a' }}>Attendance Pro</h1>
+              <p style={{ color: '#64748b', marginBottom: '30px' }}>Please log in to track your time.</p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                <input style={s.input} type="email" placeholder="Email Address" onChange={(e) => setEmail(e.target.value)} />
+                <input style={s.input} type="password" placeholder="Password" onChange={(e) => setPassword(e.target.value)} />
+                <button onClick={() => handleAuth('login')} style={s.btnPrimary}>Sign In</button>
+                <button onClick={() => handleAuth('signup')} style={{ background: 'none', border: 'none', color: '#2563eb', cursor: 'pointer', fontSize: '14px', fontWeight: '600' }}>Create a new account</button>
+              </div>
             </div>
           </div>
         ) : (
-          /* --- MAIN APP UI --- */
+          /* --- AUTHENTICATED DASHBOARD --- */
           <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' }}>
-              <h1 style={{ margin: 0, fontSize: '24px', color: '#0f172a' }}>WorkLog Pro</h1>
-              <div style={{ display: 'flex', gap: '10px' }}>
-                <button onClick={() => setView('user')} style={{ ...s.btn, background: view === 'user' ? '#fff' : 'transparent', border: '1px solid #ddd' }}>My Logs</button>
-                {isAdmin && <button onClick={() => { setView('admin'); fetchAllRecords(); }} style={{ ...s.btn, background: view === 'admin' ? '#ef4444' : '#fee2e2', color: view === 'admin' ? '#fff' : '#ef4444' }}>Admin Panel</button>}
-                <button onClick={() => supabase.auth.signOut()} style={{ ...s.btn, background: '#f1f5f9' }}>Logout</button>
+            {/* Navbar */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '40px' }}>
+              <div>
+                <h1 style={{ margin: 0, fontSize: '28px', color: '#0f172a', fontWeight: '800' }}>Dashboard</h1>
+                <p style={{ margin: 0, color: '#64748b' }}>Welcome back, <b>{user.email}</b></p>
+              </div>
+              <div style={{ display: 'flex', gap: '12px' }}>
+                <button onClick={() => setView('user')} style={{ ...s.btnPrimary, background: view === 'user' ? '#2563eb' : '#fff', color: view === 'user' ? '#fff' : '#475569', border: '1px solid #e2e8f0' }}>My Logs</button>
+                {isAdmin && <button onClick={() => { setView('admin'); fetchAllRecords(); }} style={{ ...s.btnAdmin, border: view === 'admin' ? '2px solid black' : 'none' }}>Admin View</button>}
+                <button onClick={() => supabase.auth.signOut()} style={{ ...s.btnPrimary, background: '#f1f5f9', color: '#475569' }}>Logout</button>
               </div>
             </div>
 
             {view === 'user' ? (
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '24px' }}>
-                {/* Time Actions Card */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '30px' }}>
+                {/* Time Card */}
                 <div style={s.card}>
-                  <h3 style={{ marginTop: 0 }}>Today</h3>
-                  <p style={{ color: '#64748b', fontSize: '14px' }}>{new Date().toDateString()}</p>
-                  <div style={{ marginTop: '24px' }}>
+                  <h3 style={{ marginTop: 0, color: '#1e293b' }}>Daily Check-In</h3>
+                  <div style={{ padding: '40px 0', textAlign: 'center' }}>
                     {!todayRecord ? (
-                      <button onClick={handleTimeIn} style={{ ...s.btn, background: '#10b981', color: 'white', width: '100%', fontSize: '18px', padding: '20px' }}>TIME IN</button>
+                      <button onClick={handleTimeIn} style={{ ...s.btnPrimary, width: '100%', padding: '25px', fontSize: '20px', background: '#10b981' }}>Start Shift</button>
                     ) : !todayRecord.time_out ? (
-                      <button onClick={handleTimeOut} style={{ ...s.btn, background: '#f59e0b', color: 'white', width: '100%', fontSize: '18px', padding: '20px' }}>TIME OUT</button>
-                    ) : <div style={{ textAlign: 'center', padding: '20px', border: '2px dashed #cbd5e1', borderRadius: '8px', color: '#1e293b' }}>🎉 Shift Completed</div>}
+                      <button onClick={handleTimeOut} style={{ ...s.btnPrimary, width: '100%', padding: '25px', fontSize: '20px', background: '#f59e0b' }}>End Shift</button>
+                    ) : (
+                      <div style={{ padding: '30px', border: '2px dashed #e2e8f0', borderRadius: '12px' }}>
+                        <span style={{ fontSize: '30px' }}>✅</span>
+                        <h4 style={{ marginBottom: 0 }}>Shift Finished</h4>
+                      </div>
+                    )}
                   </div>
+                  <p style={{ fontSize: '13px', color: '#94a3b8', textAlign: 'center' }}>Date: {new Date().toLocaleDateString()}</p>
                 </div>
 
-                {/* History Card */}
+                {/* History Table */}
                 <div style={s.card}>
-                  <h3 style={{ marginTop: 0 }}>Attendance History</h3>
+                  <h3 style={{ marginTop: 0 }}>Personal Log History</h3>
+                  <div style={{ overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                      <thead>
+                        <tr>
+                          <th style={s.tableHeader}>Date</th>
+                          <th style={s.tableHeader}>Time In</th>
+                          <th style={s.tableHeader}>Time Out</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {logs.map(log => (
+                          <tr key={log.id}>
+                            <td style={{ padding: '16px', borderBottom: '1px solid #f1f5f9' }}>{log.date}</td>
+                            <td style={{ padding: '16px', borderBottom: '1px solid #f1f5f9' }}>{new Date(log.time_in).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</td>
+                            <td style={{ padding: '16px', borderBottom: '1px solid #f1f5f9' }}>
+                              {log.time_out ? new Date(log.time_out).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : <span style={s.badge('#10b981')}>ON DUTY</span>}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              /* --- ADMIN INTERFACE --- */
+              <div style={s.card}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px' }}>
+                  <h2 style={{ color: '#ef4444', margin: 0 }}>System-Wide Records</h2>
+                  <div style={{ display: 'flex', gap: '10px' }}>
+                    <input style={{ ...s.input, width: 'auto' }} type="date" value={dateFilter} onChange={(e) => setDateFilter(e.target.value)} />
+                    <input style={{ ...s.input, width: 'auto' }} type="text" placeholder="User ID Search" value={userSearch} onChange={(e) => setUserSearch(e.target.value)} />
+                    <button onClick={() => { setDateFilter(''); setUserSearch(''); }} style={s.btnPrimary}>Reset</button>
+                  </div>
+                </div>
+                <div style={{ overflowX: 'auto' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead>
                       <tr>
+                        <th style={s.tableHeader}>User Identifier</th>
                         <th style={s.tableHeader}>Date</th>
-                        <th style={s.tableHeader}>Check In</th>
-                        <th style={s.tableHeader}>Check Out</th>
+                        <th style={s.tableHeader}>Checked In</th>
+                        <th style={s.tableHeader}>Checked Out</th>
+                        <th style={s.tableHeader}>Status</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {logs.map(log => (
-                        <tr key={log.id}>
-                          <td style={{ padding: '12px', borderBottom: '1px solid #f1f5f9' }}>{log.date}</td>
-                          <td style={{ padding: '12px', borderBottom: '1px solid #f1f5f9' }}>{new Date(log.time_in).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</td>
+                      {filteredRecords.map(rec => (
+                        <tr key={rec.id}>
+                          <td style={{ padding: '12px', borderBottom: '1px solid #f1f5f9', fontSize: '11px', color: '#64748b' }}>{rec.user_id}</td>
+                          <td style={{ padding: '12px', borderBottom: '1px solid #f1f5f9' }}>{rec.date}</td>
+                          <td style={{ padding: '12px', borderBottom: '1px solid #f1f5f9' }}>{new Date(rec.time_in).toLocaleTimeString()}</td>
+                          <td style={{ padding: '12px', borderBottom: '1px solid #f1f5f9' }}>{rec.time_out ? new Date(rec.time_out).toLocaleTimeString() : '--'}</td>
                           <td style={{ padding: '12px', borderBottom: '1px solid #f1f5f9' }}>
-                            {log.time_out ? new Date(log.time_out).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : <span style={{ color: '#10b981', fontWeight: 'bold' }}>Active</span>}
+                            <span style={s.badge(rec.time_out ? '#94a3b8' : '#10b981')}>{rec.time_out ? 'COMPLETED' : 'ACTIVE'}</span>
                           </td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
-              </div>
-            ) : (
-              /* --- ADMIN PANEL UI --- */
-              <div style={s.card}>
-                <h2 style={{ color: '#ef4444', marginTop: 0 }}>Administrator Control</h2>
-                <div style={{ display: 'flex', gap: '15px', marginBottom: '24px', padding: '15px', backgroundColor: '#f8fafc', borderRadius: '8px' }}>
-                  <input style={s.input} type="date" value={dateFilter} onChange={(e) => setDateFilter(e.target.value)} />
-                  <input style={s.input} type="text" placeholder="Search User ID..." value={userSearch} onChange={(e) => setUserSearch(e.target.value)} />
-                  <button onClick={() => { setDateFilter(''); setUserSearch(''); }} style={s.btn}>Clear</button>
-                </div>
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                  <thead>
-                    <tr>
-                      <th style={s.tableHeader}>User ID</th>
-                      <th style={s.tableHeader}>Date</th>
-                      <th style={s.tableHeader}>In</th>
-                      <th style={s.tableHeader}>Out</th>
-                      <th style={s.tableHeader}>Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredRecords.map(rec => (
-                      <tr key={rec.id}>
-                        <td style={{ padding: '12px', borderBottom: '1px solid #f1f5f9', fontSize: '11px', color: '#64748b' }}>{rec.user_id}</td>
-                        <td style={{ padding: '12px', borderBottom: '1px solid #f1f5f9' }}>{rec.date}</td>
-                        <td style={{ padding: '12px', borderBottom: '1px solid #f1f5f9' }}>{new Date(rec.time_in).toLocaleTimeString()}</td>
-                        <td style={{ padding: '12px', borderBottom: '1px solid #f1f5f9' }}>{rec.time_out ? new Date(rec.time_out).toLocaleTimeString() : '--'}</td>
-                        <td style={{ padding: '12px', borderBottom: '1px solid #f1f5f9' }}>
-                          <span style={s.badge(rec.time_out ? '#64748b' : '#10b981')}>{rec.time_out ? 'CLOSED' : 'ON-SITE'}</span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
               </div>
             )}
           </div>
