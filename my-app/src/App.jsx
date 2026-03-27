@@ -19,12 +19,12 @@ export default function App() {
 
   // --- UI STYLES ---
   const s = {
-    container: { backgroundColor: '#f1f5f9', minHeight: '100vh', width: '100vw', display: 'flex', justifyContent: 'center', fontFamily: 'Inter, system-ui, sans-serif' },
+    container: { backgroundColor: '#f1f5f9', minHeight: '100vh', width: '100vw', display: 'flex', justifyContent: 'center', fontFamily: '"Segoe UI", Roboto, Helvetica, Arial, sans-serif' },
     wrapper: { width: '100%', maxWidth: '1100px', padding: '40px 20px' },
-    card: { background: 'white', padding: '32px', borderRadius: '16px', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.1)', marginBottom: '24px', border: '1px solid #e2e8f0' },
-    input: { padding: '12px 16px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '14px', width: '100%', marginBottom: '16px', color: '#1e293b', boxSizing: 'border-box' },
-    label: { display: 'block', fontSize: '12px', fontWeight: '700', color: '#475569', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.5px' },
-    btnPrimary: { padding: '12px 24px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontWeight: '700', background: '#2563eb', color: 'white', transition: 'all 0.2s ease' },
+    card: { background: 'white', padding: '32px', borderRadius: '16px', boxShadow: '0 4px 20px rgba(0,0,0,0.08)', marginBottom: '24px', border: '1px solid #e2e8f0' },
+    input: { padding: '12px 16px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '14px', width: '100%', marginBottom: '16px', color: '#1e293b', boxSizing: 'border-box', outlineColor: '#2563eb' },
+    label: { display: 'block', fontSize: '12px', fontWeight: '700', color: '#475569', marginBottom: '6px', textTransform: 'uppercase' },
+    btnPrimary: { padding: '12px 24px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontWeight: '700', background: '#2563eb', color: 'white', transition: 'all 0.2s' },
     btnAdmin: { padding: '12px 24px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontWeight: '700', background: '#ef4444', color: 'white' },
     btnDelete: { background: '#fee2e2', color: '#ef4444', border: 'none', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: '700' },
     tableHeader: { background: '#f8fafc', padding: '16px', textAlign: 'left', color: '#64748b', fontSize: '11px', fontWeight: '800', borderBottom: '2px solid #e2e8f0' },
@@ -49,6 +49,7 @@ export default function App() {
   }, []);
 
   async function fetchAttendance(userId) {
+    // Replaced 'created_at' with 'time_in' to fix the 400 error from your console
     const { data, error } = await supabase
       .from('attendance')
       .select('*')
@@ -84,24 +85,17 @@ export default function App() {
 
   const handleAuth = async (e) => {
     e.preventDefault();
-    if (!email || !password) return alert("Please fill in all fields");
-
     if (authMode === 'login') {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) alert(error.message);
+      if (error) alert("Login Failed: " + error.message);
     } else {
-      const { data, error } = await supabase.auth.signUp({ 
-        email, 
-        password,
-      });
-      
+      // Sign Up Logic
+      const { data, error } = await supabase.auth.signUp({ email, password });
       if (error) {
-        alert("Registration Error: " + error.message);
-      } else if (data.user && data.session === null) {
-        alert("Registration successful! Please check your email for the confirmation link before logging in.");
+        alert("Registration Failed: " + error.message);
+      } else if (data.user) {
+        alert("Success! You can now log in.");
         setAuthMode('login');
-      } else {
-        alert("Account created and logged in!");
       }
     }
   };
@@ -115,56 +109,56 @@ export default function App() {
 
   const isAdmin = user?.email === 'admin@test.com'; 
 
-  if (loading) return <div style={{...s.container, alignItems: 'center', color: '#64748b'}}>Loading...</div>;
+  if (loading) return <div style={{...s.container, alignItems: 'center', color: '#64748b'}}>Loading Attendance System...</div>;
 
   return (
     <div style={s.container}>
       <div style={s.wrapper}>
         {!user ? (
-          /* --- AUTH UI --- */
+          /* --- LOGIN / REGISTER CARD --- */
           <div style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
-            <div style={{ ...s.card, width: '100%', maxWidth: '400px' }}>
-              <div style={{ textAlign: 'center', marginBottom: '32px' }}>
-                <h1 style={{ color: '#0f172a', fontSize: '28px', marginBottom: '8px' }}>
-                  {authMode === 'login' ? 'Sign In' : 'Create Account'}
+            <div style={{ ...s.card, width: '100%', maxWidth: '420px' }}>
+              <div style={{ textAlign: 'center', marginBottom: '30px' }}>
+                <h1 style={{ color: '#0f172a', fontSize: '32px', fontWeight: '800', marginBottom: '8px' }}>
+                  {authMode === 'login' ? 'Sign In' : 'Register'}
                 </h1>
-                <p style={{ color: '#64748b', fontSize: '14px' }}>
-                  {authMode === 'login' ? 'Enter your credentials to access your logs' : 'Sign up to start tracking your attendance'}
+                <p style={{ color: '#64748b', fontSize: '15px' }}>
+                  {authMode === 'login' ? 'Welcome back! Please enter your details.' : 'Start tracking your time today.'}
                 </p>
               </div>
 
               <form onSubmit={handleAuth}>
                 <label style={s.label}>Email Address</label>
-                <input style={s.input} type="email" placeholder="you@example.com" onChange={e => setEmail(e.target.value)} required />
+                <input style={s.input} type="email" placeholder="Enter your email" onChange={e => setEmail(e.target.value)} required />
                 
                 <label style={s.label}>Password</label>
                 <input style={s.input} type="password" placeholder="••••••••" onChange={e => setPassword(e.target.value)} required />
 
-                <button type="submit" style={{ ...s.btnPrimary, width: '100%', fontSize: '16px', marginTop: '8px' }}>
-                  {authMode === 'login' ? 'Login' : 'Register'}
+                <button type="submit" style={{ ...s.btnPrimary, width: '100%', fontSize: '16px', marginTop: '10px' }}>
+                  {authMode === 'login' ? 'Sign In' : 'Create Account'}
                 </button>
               </form>
 
-              <div style={{ marginTop: '24px', textAlign: 'center', borderTop: '1px solid #e2e8f0', paddingTop: '20px' }}>
+              <div style={{ marginTop: '25px', textAlign: 'center', borderTop: '1px solid #f1f5f9', paddingTop: '20px' }}>
                 <p style={{ color: '#64748b', fontSize: '14px' }}>
-                  {authMode === 'login' ? "New here?" : "Already have an account?"}
+                  {authMode === 'login' ? "Don't have an account?" : "Already have an account?"}
                   <button 
                     onClick={() => setAuthMode(authMode === 'login' ? 'signup' : 'login')}
                     style={{ background: 'none', border: 'none', color: '#2563eb', fontWeight: '700', cursor: 'pointer', marginLeft: '6px' }}
                   >
-                    {authMode === 'login' ? 'Create an account' : 'Sign in instead'}
+                    {authMode === 'login' ? 'Sign up' : 'Log in'}
                   </button>
                 </p>
               </div>
             </div>
           </div>
         ) : (
-          /* --- LOGGED IN UI --- */
+          /* --- DASHBOARD UI --- */
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '32px', alignItems: 'center' }}>
               <div>
-                <span style={{color: '#64748b', fontSize: '14px'}}>Logged in as</span>
-                <div style={{color: '#0f172a', fontWeight: '700', fontSize: '18px'}}>{user.email}</div>
+                <span style={{color: '#64748b', fontSize: '13px', fontWeight: '700', textTransform: 'uppercase'}}>Current User</span>
+                <div style={{color: '#0f172a', fontWeight: '800', fontSize: '20px'}}>{user.email}</div>
               </div>
               <div style={{ display: 'flex', gap: '12px' }}>
                 <button onClick={() => setView('user')} style={{...s.btnPrimary, background: view === 'user' ? '#2563eb' : 'white', color: view === 'user' ? 'white' : '#64748b', border: '1px solid #e2e8f0'}}>My Logs</button>
@@ -176,16 +170,15 @@ export default function App() {
             {view === 'user' ? (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '24px' }}>
                 <div style={s.card}>
-                  <h3 style={{marginTop: 0, color: '#0f172a'}}>Time Tracker</h3>
-                  <p style={{color: '#64748b', fontSize: '14px', marginBottom: '24px'}}>Click the button below to record your daily attendance.</p>
-                  <button onClick={handleAttendance} style={{...s.btnPrimary, width: '100%', padding: '40px 20px', fontSize: '20px', background: todayRecord ? '#f59e0b' : '#10b981', boxShadow: '0 4px 14px 0 rgba(16, 185, 129, 0.39)'}}>
+                  <h3 style={{marginTop: 0, color: '#0f172a', fontSize: '20px'}}>Punch Clock</h3>
+                  <p style={{color: '#64748b', fontSize: '14px', marginBottom: '30px'}}>Record your start and end times below.</p>
+                  <button onClick={handleAttendance} style={{...s.btnPrimary, width: '100%', padding: '50px 20px', fontSize: '24px', background: todayRecord ? '#f59e0b' : '#10b981', boxShadow: todayRecord ? '0 10px 15px -3px rgba(245, 158, 11, 0.3)' : '0 10px 15px -3px rgba(16, 185, 129, 0.3)'}}>
                     {todayRecord ? 'CLOCK OUT' : 'CLOCK IN'}
                   </button>
-                  {todayRecord && <p style={{textAlign: 'center', color: '#64748b', fontSize: '12px', marginTop: '16px'}}>Shift started at {new Date(todayRecord.time_in).toLocaleTimeString()}</p>}
                 </div>
 
                 <div style={s.card}>
-                  <h3 style={{marginTop: 0, color: '#0f172a'}}>My History</h3>
+                  <h3 style={{marginTop: 0, color: '#0f172a', fontSize: '20px'}}>My History</h3>
                   <div style={{overflowX: 'auto'}}>
                     <table style={{width: '100%', borderCollapse: 'collapse'}}>
                       <thead>
@@ -196,7 +189,7 @@ export default function App() {
                           <tr key={log.id}>
                             <td style={s.td}>{log.date}</td>
                             <td style={s.td}>{new Date(log.time_in).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</td>
-                            <td style={s.td}>{log.time_out ? new Date(log.time_out).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : <span style={s.badge('#10b981')}>ONGOING</span>}</td>
+                            <td style={s.td}>{log.time_out ? new Date(log.time_out).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : <span style={s.badge('#10b981')}>ACTIVE</span>}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -205,34 +198,34 @@ export default function App() {
                 </div>
               </div>
             ) : (
-              /* Admin Panel */
+              /* --- ADMIN PANEL --- */
               <div style={s.card}>
-                <h2 style={{marginTop: 0, color: '#0f172a'}}>Admin Dashboard</h2>
-                <div style={{display: 'flex', gap: '16px', marginBottom: '24px'}}>
+                <h2 style={{marginTop: 0, color: '#0f172a'}}>Staff Attendance Logs</h2>
+                <div style={{display: 'flex', gap: '16px', marginBottom: '24px', background: '#f8fafc', padding: '20px', borderRadius: '12px'}}>
                    <div style={{flex: 1}}>
-                      <label style={s.label}>Date Filter</label>
-                      <input style={s.input} type="date" value={dateFilter} onChange={e => setDateFilter(e.target.value)} />
+                      <label style={s.label}>Filter Date</label>
+                      <input style={{...s.input, marginBottom: 0}} type="date" value={dateFilter} onChange={e => setDateFilter(e.target.value)} />
                    </div>
                    <div style={{flex: 2}}>
-                      <label style={s.label}>Search User ID</label>
-                      <input style={s.input} placeholder="Search by UUID..." onChange={e => setUserSearch(e.target.value)} />
+                      <label style={s.label}>Search User UUID</label>
+                      <input style={{...s.input, marginBottom: 0}} placeholder="Search..." onChange={e => setUserSearch(e.target.value)} />
                    </div>
                 </div>
                 <div style={{overflowX: 'auto'}}>
                   <table style={{width: '100%', borderCollapse: 'collapse'}}>
                     <thead>
                       <tr>
-                        <th style={s.tableHeader}>USER ID</th>
+                        <th style={s.tableHeader}>STAFF ID</th>
                         <th style={s.tableHeader}>DATE</th>
-                        <th style={s.tableHeader}>IN</th>
-                        <th style={s.tableHeader}>OUT</th>
+                        <th style={s.tableHeader}>TIME IN</th>
+                        <th style={s.tableHeader}>TIME OUT</th>
                         <th style={s.tableHeader}>ACTIONS</th>
                       </tr>
                     </thead>
                     <tbody>
                       {allRecords.filter(r => (dateFilter === '' || r.date === dateFilter) && (userSearch === '' || r.user_id.includes(userSearch))).map(rec => (
                         <tr key={rec.id}>
-                          <td style={{...s.td, fontSize: '11px', color: '#64748b'}}>{rec.user_id.slice(0,8)}...</td>
+                          <td style={{...s.td, fontSize: '11px', color: '#64748b', fontFamily: 'monospace'}}>{rec.user_id.slice(0,12)}...</td>
                           <td style={s.td}>{rec.date}</td>
                           <td style={s.td}>{new Date(rec.time_in).toLocaleTimeString()}</td>
                           <td style={s.td}>{rec.time_out ? new Date(rec.time_out).toLocaleTimeString() : '--'}</td>
