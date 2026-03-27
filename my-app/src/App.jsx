@@ -10,6 +10,7 @@ export default function App() {
   const [allRecords, setAllRecords] = useState([]); 
   const [todayRecord, setTodayRecord] = useState(null);
   const [view, setView] = useState('user'); 
+  // FIXED: Defaulting to empty string so all records show immediately
   const [dateFilter, setDateFilter] = useState('');
   const [userSearch, setUserSearch] = useState('');
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -28,24 +29,31 @@ export default function App() {
     spinner: { width: '40px', height: '40px', border: '4px solid #f3f3f3', borderTop: '4px solid #2563eb', borderRadius: '50%', animation: 'spin 1s linear infinite' }
   };
 
-  // Memoized fetch function so it can be used in intervals
-  const fetchAllRecords = useCallback(async () => {
-    setIsRefreshing(true);
-    const { data, error } = await supabase
-      .from('attendance')
-      .select(`*, profiles:user_id (id)`)
-      .order('date', { ascending: false });
-    
-    if (!error) setAllRecords(data || []);
-    setIsRefreshing(false);
-  }, []);
-
   const fetchAttendance = async (userId) => {
     const { data } = await supabase.from('attendance').select('*').eq('user_id', userId).order('date', { ascending: false });
     setLogs(data || []);
     const today = new Date().toISOString().split('T')[0];
     setTodayRecord(data?.find(r => r.date === today && !r.time_out));
   };
+
+  const fetchAllRecords = useCallback(async () => {
+    setIsRefreshing(true);
+    // Uses a join to get the numeric ID from the profiles table
+    const { data, error } = await supabase
+      .from('attendance')
+      .select(`
+        *,
+        profiles:user_id ( id )
+      `)
+      .order('date', { ascending: false });
+    
+    if (!error) {
+        setAllRecords(data || []);
+    } else {
+        console.error("Admin Fetch Error:", error.message);
+    }
+    setIsRefreshing(false);
+  }, []);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -64,17 +72,12 @@ export default function App() {
     return () => authListener.subscription.unsubscribe();
   }, []);
 
-  // AUTO-REFRESH LOGIC: Runs every 30 seconds if in Admin View
+  // Sync admin data when view changes to admin
   useEffect(() => {
-    let interval;
-    if (view === 'admin' && user?.email === 'admin@test.com') {
-      fetchAllRecords(); // Initial fetch
-      interval = setInterval(() => {
+    if (view === 'admin') {
         fetchAllRecords();
-      }, 30000); // 30 seconds
     }
-    return () => clearInterval(interval);
-  }, [view, user, fetchAllRecords]);
+  }, [view, fetchAllRecords]);
 
   const handleAuth = async (type) => {
     const { error } = type === 'login' 
@@ -85,7 +88,7 @@ export default function App() {
 
   const handleTimeIn = async () => {
     const { error } = await supabase.from('attendance').insert([{ user_id: user.id }]);
-    if (error) alert("Already timed in today.");
+    if (error) alert("Already timed in for today.");
     fetchAttendance(user.id);
   };
 
@@ -101,7 +104,7 @@ export default function App() {
     return matchesSearch && matchesDate;
   });
 
-  const isAdmin = user?.email === 'admin@test.com'; 
+  const isAdmin = user?.email === 'admin@test.com'; // Change this to your actual admin email
 
   if (loading) return (
     <div style={{ ...s.container, alignItems: 'center', justifyContent: 'center' }}>
@@ -129,7 +132,7 @@ export default function App() {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' }}>
               <div>
                 <h1 style={{ margin: 0 }}>Dashboard</h1>
-                <p style={{ margin: 0, color: '#64748b' }}>User: <b>{user.email}</b></p>
+                <p style={{ margin: 0, color: '#64748b' }}>Account: <b>{user.email}</b></p>
               </div>
               <div style={{ display: 'flex', gap: '10px' }}>
                 <button onClick={() => setView('user')} style={{ ...s.btnPrimary, background: view === 'user' ? '#2563eb' : '#fff', color: view === 'user' ? '#fff' : '#475569', border: '1px solid #ddd' }}>My Logs</button>
@@ -141,18 +144,21 @@ export default function App() {
             {view === 'user' ? (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '24px' }}>
                 <div style={s.card}>
-                  <h3>Attendance</h3>
-                  {!todayRecord ? (
-                    <button onClick={handleTimeIn} style={{ ...s.btnPrimary, width: '100%', background: '#10b981' }}>TIME IN</button>
-                  ) : (
-                    <button onClick={handleTimeOut} style={{ ...s.btnPrimary, width: '100%', background: '#f59e0b' }}>TIME OUT</button>
-                  )}
+                  <h3>Shift Status</h3>
+                  <div style={{ padding: '20px 0' }}>
+                    {!todayRecord ? (
+                        <button onClick={handleTimeIn} style={{ ...s.btnPrimary, width: '100%', background: '#10b981' }}>TIME IN</button>
+                    ) : (
+                        <button onClick={handleTimeOut} style={{ ...s.btnPrimary, width: '100%', background: '#f59e0b' }}>TIME OUT</button>
+                    )}
+                  </div>
+                  <p style={{ fontSize: '12px', color: '#94a3b8', textAlign: 'center' }}>Today: {new Date().toLocaleDateString()}</p>
                 </div>
                 <div style={s.card}>
-                  <h3>Personal History</h3>
+                  <h3>Personal Logs</h3>
                   <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead>
-                      <tr><th style={s.tableHeader}>Log ID</th><th style={s.tableHeader}>Date</th><th style={s.tableHeader}>In</th><th style={s.tableHeader}>Out</th></tr>
+                      <tr><th style={s.tableHeader}>Log #</th><th style={s.tableHeader}>Date</th><th style={s.tableHeader}>In</th><th style={s.tableHeader}>Out</th></tr>
                     </thead>
                     <tbody>
                       {logs.map(log => (
@@ -160,7 +166,7 @@ export default function App() {
                           <td style={s.td}><span style={s.idBadge}>{log.id}</span></td>
                           <td style={s.td}>{log.date}</td>
                           <td style={s.td}>{new Date(log.time_in).toLocaleTimeString()}</td>
-                          <td style={s.td}>{log.time_out ? new Date(log.time_out).toLocaleTimeString() : 'Active'}</td>
+                          <td style={s.td}>{log.time_out ? new Date(log.time_out).toLocaleTimeString() : <span style={{color: '#10b981'}}>On-going</span>}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -169,16 +175,16 @@ export default function App() {
               </div>
             ) : (
               <div style={s.card}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <h2 style={{ color: '#ef4444' }}>Admin: System Logs</h2>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                    <h2 style={{ color: '#ef4444', margin: 0 }}>Admin: System Logs</h2>
                     <button onClick={fetchAllRecords} style={s.btnRefresh}>
-                        {isRefreshing ? 'Refreshing...' : '🔄 Refresh Data'}
+                        {isRefreshing ? 'Syncing...' : '🔄 Refresh Now'}
                     </button>
                 </div>
                 <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
                   <input style={s.input} type="date" value={dateFilter} onChange={e => setDateFilter(e.target.value)} />
-                  <input style={s.input} type="text" placeholder="Search User #" value={userSearch} onChange={e => setUserSearch(e.target.value)} />
-                  <button onClick={() => { setDateFilter(''); setUserSearch(''); }} style={{ ...s.btnPrimary, background: '#64748b' }}>Reset Filters</button>
+                  <input style={s.input} type="text" placeholder="Search Numeric User #" value={userSearch} onChange={e => setUserSearch(e.target.value)} />
+                  <button onClick={() => { setDateFilter(''); setUserSearch(''); }} style={{ ...s.btnPrimary, background: '#64748b' }}>Reset</button>
                 </div>
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
@@ -188,13 +194,14 @@ export default function App() {
                     {filteredRecords.length > 0 ? filteredRecords.map(rec => (
                       <tr key={rec.id}>
                         <td style={s.td}><span style={s.idBadge}>{rec.id}</span></td>
+                        {/* Displays the permanent numeric ID from profiles table */}
                         <td style={s.td}><b>User {rec.profiles?.id || '?'}</b></td>
                         <td style={s.td}>{rec.date}</td>
                         <td style={s.td}>{new Date(rec.time_in).toLocaleTimeString()}</td>
                         <td style={s.td}>{rec.time_out ? new Date(rec.time_out).toLocaleTimeString() : '--'}</td>
                       </tr>
                     )) : (
-                      <tr><td colSpan="5" style={{...s.td, textAlign: 'center'}}>No matching records found.</td></tr>
+                      <tr><td colSpan="5" style={{...s.td, textAlign: 'center'}}>No matching records found. Try clearing filters.</td></tr>
                     )}
                   </tbody>
                 </table>
