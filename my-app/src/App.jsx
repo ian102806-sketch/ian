@@ -197,11 +197,11 @@ export default function App() {
                     <tbody>
                       {filteredRecords.map(rec => (
                         <tr key={rec.id}>
-                          <td style={{ padding: '12px', borderBottom: '1px solid #f1f5f9', fontSize: '11px', color: '#64748b' }}>{rec.user_id}</td>
-                          <td style={{ padding: '12px', borderBottom: '1px solid #f1f5f9' }}>{rec.date}</td>
-                          <td style={{ padding: '12px', borderBottom: '1px solid #f1f5f9' }}>{new Date(rec.time_in).toLocaleTimeString()}</td>
-                          <td style={{ padding: '12px', borderBottom: '1px solid #f1f5f9' }}>{rec.time_out ? new Date(rec.time_out).toLocaleTimeString() : '--'}</td>
-                          <td style={{ padding: '12px', borderBottom: '1px solid #f1f5f9' }}>
+                          <td style={{ padding: '12px', borderBottom: '1px solid #000000ff', fontSize: '11px', color: '#64748b' }}>{rec.user_id}</td>
+                          <td style={{ padding: '12px', borderBottom: '1px solid #000000ff' }}>{rec.date}</td>
+                          <td style={{ padding: '12px', borderBottom: '1px solid #000000ff' }}>{new Date(rec.time_in).toLocaleTimeString()}</td>
+                          <td style={{ padding: '12px', borderBottom: '1px solid #000000ff' }}>{rec.time_out ? new Date(rec.time_out).toLocaleTimeString() : '--'}</td>
+                          <td style={{ padding: '12px', borderBottom: '1px solid #000000ff' }}>
                             <span style={s.badge(rec.time_out ? '#94a3b8' : '#10b981')}>{rec.time_out ? 'COMPLETED' : 'ACTIVE'}</span>
                           </td>
                         </tr>
