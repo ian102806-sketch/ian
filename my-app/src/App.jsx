@@ -215,7 +215,7 @@ export default function App() {
                   <table style={{width: '100%', borderCollapse: 'collapse'}}>
                     <thead>
                       <tr>
-                        <th style={s.tableHeader}>STAFF ID</th>
+                        <th style={s.tableHeader}>STAFF IDa</th>
                         <th style={s.tableHeader}>DATE</th>
                         <th style={s.tableHeader}>TIME IN</th>
                         <th style={s.tableHeader}>TIME OUT</th>
