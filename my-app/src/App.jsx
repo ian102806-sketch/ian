@@ -49,7 +49,6 @@ export default function App() {
   }
 
   async function fetchAllRecords() {
-    // This query joins the Attendance table with the Profiles table to get numeric User IDs
     const { data, error } = await supabase
       .from('attendance')
       .select(`
@@ -58,8 +57,11 @@ export default function App() {
       `)
       .order('date', { ascending: false });
     
-    if (error) console.error(error);
-    else setAllRecords(data || []);
+    if (error) {
+      console.error("Admin Fetch Error:", error.message);
+    } else {
+      setAllRecords(data || []);
+    }
   }
 
   const handleAuth = async (type) => {
@@ -67,12 +69,11 @@ export default function App() {
       ? await supabase.auth.signInWithPassword({ email, password })
       : await supabase.auth.signUp({ email, password });
     if (error) alert(error.message);
-    else if (type === 'signup') alert("Registration successful! Check your email to confirm.");
   };
 
   const handleTimeIn = async () => {
     const { error } = await supabase.from('attendance').insert([{ user_id: user.id }]);
-    if (error) alert("Shift already started for today.");
+    if (error) alert("Shift already active.");
     fetchAttendance(user.id);
   };
 
@@ -81,18 +82,18 @@ export default function App() {
     fetchAttendance(user.id);
   };
 
+  // Search logic for Numeric User IDs
   const filteredRecords = allRecords.filter(rec => {
-    const searchMatch = userSearch === '' || 
-      (rec.profiles?.id && rec.profiles.id.toString().includes(userSearch)) || 
-      rec.user_id.toLowerCase().includes(userSearch.toLowerCase());
-    return (dateFilter === '' || rec.date === dateFilter) && searchMatch;
+    const numericUserId = rec.profiles?.id?.toString() || "";
+    const matchesSearch = userSearch === '' || numericUserId.includes(userSearch);
+    const matchesDate = dateFilter === '' || rec.date === dateFilter;
+    return matchesSearch && matchesDate;
   });
 
-  const isAdmin = user?.email === 'admin@test.com'; 
+  const isAdmin = user?.email === 'admin@test.com'; //
 
   if (loading) return (
     <div style={{ ...s.container, alignItems: 'center', justifyContent: 'center' }}>
-      <style>{`@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
       <div style={s.spinner}></div>
     </div>
   );
@@ -103,14 +104,12 @@ export default function App() {
         {!user ? (
           <div style={{ display: 'grid', placeItems: 'center', height: '70vh' }}>
             <div style={{ ...s.card, width: '100%', maxWidth: '400px', textAlign: 'center' }}>
-              <h1 style={{ color: '#0f172a', marginBottom: '30px' }}>WorkLog Pro</h1>
+              <h1 style={{ color: '#0f172a' }}>WorkLog Pro</h1>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
                 <input style={s.input} type="email" placeholder="Email" onChange={e => setEmail(e.target.value)} />
                 <input style={s.input} type="password" placeholder="Password" onChange={e => setPassword(e.target.value)} />
                 <button onClick={() => handleAuth('login')} style={s.btnPrimary}>Login</button>
-                <button onClick={() => handleAuth('signup')} style={{ background: 'none', border: 'none', color: '#2563eb', cursor: 'pointer', fontWeight: '600' }}>
-                  Create Account
-                </button>
+                <button onClick={() => handleAuth('signup')} style={{ background: 'none', border: 'none', color: '#2563eb', cursor: 'pointer' }}>Register</button>
               </div>
             </div>
           </div>
@@ -118,8 +117,8 @@ export default function App() {
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' }}>
               <div>
-                <h1 style={{ margin: 0, color: '#0f172a' }}>Dashboard</h1>
-                <p style={{ margin: 0, color: '#64748b' }}><b>{user.email}</b></p>
+                <h1 style={{ margin: 0 }}>Dashboard</h1>
+                <p style={{ margin: 0, color: '#64748b' }}>{user.email}</p>
               </div>
               <div style={{ display: 'flex', gap: '10px' }}>
                 <button onClick={() => setView('user')} style={{ ...s.btnPrimary, background: view === 'user' ? '#2563eb' : '#fff', color: view === 'user' ? '#fff' : '#475569', border: '1px solid #ddd' }}>My Logs</button>
@@ -131,65 +130,55 @@ export default function App() {
             {view === 'user' ? (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '24px' }}>
                 <div style={s.card}>
-                  <h3 style={{ color: '#1e293b', marginTop: 0 }}>Daily Shift</h3>
-                  <div style={{ textAlign: 'center', padding: '20px 0' }}>
-                    {!todayRecord ? (
-                      <button onClick={handleTimeIn} style={{ ...s.btnPrimary, width: '100%', background: '#10b981', padding: '20px', fontSize: '18px' }}>TIME IN</button>
-                    ) : (
-                      <button onClick={handleTimeOut} style={{ ...s.btnPrimary, width: '100%', background: '#f59e0b', padding: '20px', fontSize: '18px' }}>TIME OUT</button>
-                    )}
-                  </div>
+                  <h3>Shift Status</h3>
+                  {!todayRecord ? (
+                    <button onClick={handleTimeIn} style={{ ...s.btnPrimary, width: '100%', background: '#10b981' }}>TIME IN</button>
+                  ) : (
+                    <button onClick={handleTimeOut} style={{ ...s.btnPrimary, width: '100%', background: '#f59e0b' }}>TIME OUT</button>
+                  )}
                 </div>
-
                 <div style={s.card}>
-                  <h3 style={{ color: '#1e293b', marginTop: 0 }}>Attendance Log</h3>
-                  <div style={{ overflowX: 'auto' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                      <thead>
-                        <tr><th style={s.tableHeader}>Log ID</th><th style={s.tableHeader}>Date</th><th style={s.tableHeader}>In</th><th style={s.tableHeader}>Out</th></tr>
-                      </thead>
-                      <tbody>
-                        {logs.map(log => (
-                          <tr key={log.id}>
-                            <td style={s.td}><span style={s.idBadge}>{log.id}</span></td>
-                            <td style={s.td}>{log.date}</td>
-                            <td style={s.td}>{new Date(log.time_in).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</td>
-                            <td style={s.td}>{log.time_out ? new Date(log.time_out).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : <span style={{color: '#10b981', fontWeight: 'bold'}}>Active</span>}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              /* --- ADMIN INTERFACE WITH NUMERIC USER IDs --- */
-              <div style={s.card}>
-                <h2 style={{ color: '#ef4444', marginTop: 0 }}>Admin Records</h2>
-                <div style={{ display: 'flex', gap: '15px', marginBottom: '24px', padding: '15px', backgroundColor: '#f8fafc', borderRadius: '8px', flexWrap: 'wrap' }}>
-                  <input style={{...s.input, width: 'auto'}} type="date" value={dateFilter} onChange={(e) => setDateFilter(e.target.value)} />
-                  <input style={{...s.input, width: 'auto'}} type="text" placeholder="Search Numeric User ID..." value={userSearch} onChange={(e) => setUserSearch(e.target.value)} />
-                  <button onClick={() => { setDateFilter(''); setUserSearch(''); }} style={{ ...s.btnPrimary, background: '#64748b' }}>Clear</button>
-                </div>
-                <div style={{ overflowX: 'auto' }}>
+                  <h3>Your Recent Logs</h3>
                   <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead>
-                      <tr><th style={s.tableHeader}>Log ID</th><th style={s.tableHeader}>User ID</th><th style={s.tableHeader}>Date</th><th style={s.tableHeader}>In</th><th style={s.tableHeader}>Out</th></tr>
+                      <tr><th style={s.tableHeader}>Log ID</th><th style={s.tableHeader}>Date</th><th style={s.tableHeader}>In</th><th style={s.tableHeader}>Out</th></tr>
                     </thead>
                     <tbody>
-                      {filteredRecords.map(rec => (
-                        <tr key={rec.id}>
-                          <td style={s.td}><span style={s.idBadge}>{rec.id}</span></td>
-                          {/* Display numeric ID from profile table */}
-                          <td style={s.td}><span style={{fontWeight: 'bold'}}>User {rec.profiles?.id || '?' }</span></td>
-                          <td style={s.td}>{rec.date}</td>
-                          <td style={s.td}>{new Date(rec.time_in).toLocaleTimeString()}</td>
-                          <td style={s.td}>{rec.time_out ? new Date(rec.time_out).toLocaleTimeString() : '--'}</td>
+                      {logs.map(log => (
+                        <tr key={log.id}>
+                          <td style={s.td}><span style={s.idBadge}>{log.id}</span></td>
+                          <td style={s.td}>{log.date}</td>
+                          <td style={s.td}>{new Date(log.time_in).toLocaleTimeString()}</td>
+                          <td style={s.td}>{log.time_out ? new Date(log.time_out).toLocaleTimeString() : 'Active'}</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
+              </div>
+            ) : (
+              <div style={s.card}>
+                <h2 style={{ color: '#ef4444' }}>Admin: System Logs</h2>
+                <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
+                  <input style={s.input} type="date" value={dateFilter} onChange={e => setDateFilter(e.target.value)} />
+                  <input style={s.input} type="text" placeholder="Search User #" onChange={e => setUserSearch(e.target.value)} />
+                </div>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr><th style={s.tableHeader}>Log #</th><th style={s.tableHeader}>User #</th><th style={s.tableHeader}>Date</th><th style={s.tableHeader}>In</th><th style={s.tableHeader}>Out</th></tr>
+                  </thead>
+                  <tbody>
+                    {filteredRecords.map(rec => (
+                      <tr key={rec.id}>
+                        <td style={s.td}><span style={s.idBadge}>{rec.id}</span></td>
+                        <td style={s.td}><b>User {rec.profiles?.id || '?'}</b></td>
+                        <td style={s.td}>{rec.date}</td>
+                        <td style={s.td}>{new Date(rec.time_in).toLocaleTimeString()}</td>
+                        <td style={s.td}>{rec.time_out ? new Date(rec.time_out).toLocaleTimeString() : '--'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             )}
           </div>
