@@ -12,21 +12,21 @@ export default function App() {
   const [dateFilter, setDateFilter] = useState('');
   const [userSearch, setUserSearch] = useState('');
   const [todayRecord, setTodayRecord] = useState(null);
-  // NEW: Notification state
   const [notification, setNotification] = useState({ show: false, message: '', type: 'success' });
 
   const s = {
     container: { backgroundColor: '#f8fafc', minHeight: '100vh', width: '100vw', display: 'flex', justifyContent: 'center', fontFamily: 'system-ui, sans-serif', color: '#1e293b' },
     wrapper: { width: '100%', maxWidth: '1100px', padding: '40px 20px' },
-    card: { background: 'white', padding: '30px', borderRadius: '16px', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', marginBottom: '24px', border: '1px solid #e2e8f0' },
-    input: { padding: '12px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '14px', width: '100%', marginBottom: '10px', boxSizing: 'border-box' },
-    btnPrimary: { padding: '12px 24px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontWeight: 'bold', background: '#2563eb', color: 'white' },
-    btnAdmin: { padding: '12px 24px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontWeight: 'bold', background: '#ef4444', color: 'white' },
+    card: { background: 'white', padding: '30px', borderRadius: '20px', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', marginBottom: '24px', border: '1px solid #e2e8f0' },
+    input: { padding: '12px', borderRadius: '10px', border: '1px solid #cbd5e1', fontSize: '14px', width: '100%', marginBottom: '10px', boxSizing: 'border-box' },
+    btnPrimary: { padding: '12px 24px', borderRadius: '10px', border: 'none', cursor: 'pointer', fontWeight: 'bold', background: '#2563eb', color: 'white' },
+    btnAdmin: { padding: '12px 24px', borderRadius: '10px', border: 'none', cursor: 'pointer', fontWeight: 'bold', background: '#ef4444', color: 'white' },
+    // STYLED: Rounded attendance button
+    btnAttendance: { padding: '20px', borderRadius: '15px', border: 'none', cursor: 'pointer', fontWeight: 'bold', fontSize: '1.2rem', color: 'white', width: '100%', transition: '0.2s' },
     tableHeader: { background: '#f1f5f9', padding: '15px', textAlign: 'left', color: '#475569', fontSize: '12px', fontWeight: '800', textTransform: 'uppercase' },
     td: { padding: '16px', borderBottom: '1px solid #f1f5f9', fontSize: '14px', color: '#1e293b' },
-    idBadge: { backgroundColor: '#f1f5f9', padding: '4px 10px', borderRadius: '6px', color: '#2563eb', fontWeight: '600' },
-    userLabel: { background: '#1e293b', padding: '10px 20px', borderRadius: '8px', fontSize: '14px', color: '#fff', marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
-    toast: { position: 'fixed', top: '20px', right: '20px', padding: '15px 25px', borderRadius: '8px', color: 'white', fontWeight: 'bold', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', zIndex: 1000, transition: 'all 0.3s ease' }
+    userLabel: { background: '#1e293b', padding: '12px 20px', borderRadius: '12px', fontSize: '14px', color: '#fff', marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
+    toast: { position: 'fixed', top: '20px', right: '20px', padding: '15px 25px', borderRadius: '10px', color: 'white', fontWeight: 'bold', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', zIndex: 1000 }
   };
 
   const showToast = (msg, type = 'success') => {
@@ -41,7 +41,9 @@ export default function App() {
       .eq('user_id', userId)
       .order('created_at', { ascending: false });
     
-    if (!error) {
+    if (error) {
+      console.error("Personal log error:", error.message);
+    } else {
       setLogs(data || []);
       const today = new Date().toISOString().split('T')[0];
       const activeShift = data?.find(r => r.date === today && !r.time_out);
@@ -74,10 +76,8 @@ export default function App() {
       } else {
         setUser(null);
         setLogs([]);
-        setTodayRecord(null);
       }
     });
-
     return () => authListener.subscription.unsubscribe();
   }, [fetchUserLogs]);
 
@@ -85,24 +85,13 @@ export default function App() {
     if (view === 'admin') fetchAllRecords();
   }, [view, fetchAllRecords]);
 
-  const handleAuth = async (type) => {
-    const { error } = type === 'login' 
-      ? await supabase.auth.signInWithPassword({ email, password })
-      : await supabase.auth.signUp({ email, password });
-    
-    if (error) showToast(error.message, 'error');
-    else if (type === 'signup') showToast("Registration successful! Please login.");
-  };
-
   const handleAttendance = async () => {
     if (!todayRecord) {
       const { error } = await supabase.from('attendance').insert([{ user_id: user.id }]);
-      if (!error) showToast("Successfully Timed In! 🟢");
-      else showToast("Failed to Time In.", "error");
+      if (!error) showToast("Clocked In Successfully! 🟢");
     } else {
       const { error } = await supabase.from('attendance').update({ time_out: new Date().toISOString() }).eq('id', todayRecord.id);
-      if (!error) showToast("Successfully Timed Out! 🔴");
-      else showToast("Failed to Time Out.", "error");
+      if (!error) showToast("Clocked Out Successfully! 🔴");
     }
     fetchUserLogs(user.id);
   };
@@ -118,7 +107,6 @@ export default function App() {
 
   return (
     <div style={s.container}>
-      {/* SUCCESS/ERROR TOAST */}
       {notification.show && (
         <div style={{ ...s.toast, backgroundColor: notification.type === 'success' ? '#10b981' : '#ef4444' }}>
           {notification.message}
@@ -128,24 +116,19 @@ export default function App() {
       <div style={s.wrapper}>
         {!user ? (
           <div style={{ display: 'grid', placeItems: 'center', height: '60vh' }}>
-            <div style={{ ...s.card, width: '350px', textAlign: 'center' }}>
-              <h1 style={{ marginBottom: '25px' }}>WorkLog</h1>
+            <div style={s.card}>
+              <h1 style={{ textAlign: 'center' }}>WorkLog</h1>
               <input style={s.input} placeholder="Email" onChange={e => setEmail(e.target.value)} />
               <input style={s.input} type="password" placeholder="Password" onChange={e => setPassword(e.target.value)} />
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                <button style={s.btnPrimary} onClick={() => handleAuth('login')}>Login</button>
-                <button style={{ background: 'none', border: 'none', color: '#2563eb', cursor: 'pointer', fontSize: '14px' }} onClick={() => handleAuth('signup')}>
-                  Create New Account
-                </button>
-              </div>
+              <button style={{ ...s.btnPrimary, width: '100%', marginBottom: '10px' }} onClick={() => supabase.auth.signInWithPassword({ email, password })}>Login</button>
+              <button style={{ background: 'none', border: 'none', color: '#2563eb', cursor: 'pointer', width: '100%' }} onClick={() => supabase.auth.signUp({ email, password })}>Register</button>
             </div>
           </div>
         ) : (
           <div>
-            {/* USER REMINDER HEADER */}
             <div style={s.userLabel}>
-              <span>👤 Currently logged as: <strong>{user.email}</strong></span>
-              <button onClick={() => supabase.auth.signOut()} style={{ background: '#ef4444', color: 'white', border: 'none', padding: '5px 12px', borderRadius: '5px', cursor: 'pointer', fontWeight: 'bold' }}>Logout</button>
+              <span>👤 User: <strong>{user.email}</strong></span>
+              <button onClick={() => supabase.auth.signOut()} style={{ background: '#ef4444', color: 'white', border: 'none', padding: '6px 15px', borderRadius: '8px', cursor: 'pointer' }}>Logout</button>
             </div>
 
             <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
@@ -155,21 +138,20 @@ export default function App() {
 
             {view === 'admin' ? (
               <div style={s.card}>
-                <h2>Admin: All Logs</h2>
+                <h2>Admin Logs</h2>
                 <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
                   <input type="date" style={s.input} value={dateFilter} onChange={e => setDateFilter(e.target.value)} />
                   <input type="text" style={s.input} placeholder="User #" value={userSearch} onChange={e => setUserSearch(e.target.value)} />
                 </div>
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
-                    <tr><th style={s.tableHeader}>Log #</th><th style={s.tableHeader}>User #</th><th style={s.tableHeader}>Date</th><th style={s.tableHeader}>In</th><th style={s.tableHeader}>Out</th></tr>
+                    <tr><th style={s.tableHeader}>Log #</th><th style={s.tableHeader}>User #</th><th style={s.tableHeader}>In</th><th style={s.tableHeader}>Out</th></tr>
                   </thead>
                   <tbody>
                     {filteredRecords.map(rec => (
                       <tr key={rec.id}>
-                        <td style={s.td}><span style={s.idBadge}>{rec.id}</span></td>
+                        <td style={s.td}>{rec.id}</td>
                         <td style={s.td}>User {rec.profiles?.id || '?'}</td>
-                        <td style={s.td}>{rec.date}</td>
                         <td style={s.td}>{new Date(rec.time_in).toLocaleTimeString()}</td>
                         <td style={s.td}>{rec.time_out ? new Date(rec.time_out).toLocaleTimeString() : '--'}</td>
                       </tr>
@@ -178,10 +160,13 @@ export default function App() {
                 </table>
               </div>
             ) : (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px' }}>
                 <div style={s.card}>
                   <h3>Clock In/Out</h3>
-                  <button onClick={handleAttendance} style={{ ...s.btnPrimary, background: todayRecord ? '#f59e0b' : '#10b981', width: '100%', padding: '25px', fontSize: '1.2rem' }}>
+                  <button 
+                    onClick={handleAttendance} 
+                    style={{ ...s.btnAttendance, background: todayRecord ? '#f59e0b' : '#10b981' }}
+                  >
                     {todayRecord ? 'TIME OUT' : 'TIME IN'}
                   </button>
                 </div>
@@ -192,13 +177,15 @@ export default function App() {
                       <tr><th style={s.tableHeader}>Date</th><th style={s.tableHeader}>In</th><th style={s.tableHeader}>Out</th></tr>
                     </thead>
                     <tbody>
-                      {logs.map(log => (
+                      {logs.length > 0 ? logs.map(log => (
                         <tr key={log.id}>
                           <td style={s.td}>{log.date}</td>
                           <td style={s.td}>{new Date(log.time_in).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</td>
-                          <td style={s.td}>{log.time_out ? new Date(log.time_out).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : <span style={{color:'#10b981'}}>Active</span>}</td>
+                          <td style={s.td}>{log.time_out ? new Date(log.time_out).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Active'}</td>
                         </tr>
-                      ))}
+                      )) : (
+                        <tr><td colSpan="3" style={{...s.td, textAlign: 'center'}}>No personal logs yet.</td></tr>
+                      )}
                     </tbody>
                   </table>
                 </div>
