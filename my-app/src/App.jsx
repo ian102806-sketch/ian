@@ -21,7 +21,7 @@ export default function App() {
     input: { padding: '12px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '14px', width: '100%', marginBottom: '10px', boxSizing: 'border-box' },
     btnPrimary: { padding: '12px 24px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontWeight: 'bold', background: '#2563eb', color: 'white' },
     btnAdmin: { padding: '12px 24px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontWeight: 'bold', background: '#ef4444', color: 'white' },
-    // Admin Delete Styling
+    // Styling for your new Action column
     btnDelete: { background: '#fee2e2', color: '#ef4444', border: 'none', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold' },
     tableHeader: { background: '#f1f5f9', padding: '15px', textAlign: 'left', color: '#475569', fontSize: '12px', fontWeight: '800', textTransform: 'uppercase' },
     td: { padding: '16px', borderBottom: '1px solid #f1f5f9', fontSize: '14px', color: '#1e293b' },
@@ -34,7 +34,7 @@ export default function App() {
     setTimeout(() => setNotification({ show: false, message: '', type: 'success' }), 3000);
   };
 
-  // FIX: This ensures we fetch logs using the auth user's UUID
+  // FIX: Uses session.user.id (the UUID) to match your table data
   const fetchUserLogs = useCallback(async (userId) => {
     const { data, error } = await supabase
       .from('attendance')
@@ -78,7 +78,6 @@ export default function App() {
         setTodayRecord(null);
       }
     });
-
     return () => authListener.subscription.unsubscribe();
   }, [fetchUserLogs]);
 
@@ -86,31 +85,22 @@ export default function App() {
     if (view === 'admin') fetchAllRecords();
   }, [view, fetchAllRecords]);
 
-  const handleAuth = async (type) => {
-    const { error } = type === 'login' 
-      ? await supabase.auth.signInWithPassword({ email, password })
-      : await supabase.auth.signUp({ email, password });
-    
-    if (error) showToast(error.message, 'error');
-  };
-
   const handleAttendance = async () => {
     if (!todayRecord) {
-      const { error } = await supabase.from('attendance').insert([{ user_id: user.id }]);
-      if (!error) showToast("Time In recorded! 🟢");
+      await supabase.from('attendance').insert([{ user_id: user.id }]);
+      showToast("Timed In! 🟢");
     } else {
-      const { error } = await supabase.from('attendance').update({ time_out: new Date().toISOString() }).eq('id', todayRecord.id);
-      if (!error) showToast("Time Out recorded! 🔴");
+      await supabase.from('attendance').update({ time_out: new Date().toISOString() }).eq('id', todayRecord.id);
+      showToast("Timed Out! 🔴");
     }
     fetchUserLogs(user.id);
   };
 
-  // Admin Delete Function
-  const deleteRecord = async (id) => {
-    if (window.confirm("Are you sure you want to delete this log?")) {
+  const deleteLog = async (id) => {
+    if (window.confirm("Delete this log permanently?")) {
       const { error } = await supabase.from('attendance').delete().eq('id', id);
       if (!error) {
-        showToast("Record deleted successfully");
+        showToast("Log deleted");
         fetchAllRecords();
       }
     }
@@ -137,16 +127,16 @@ export default function App() {
         {!user ? (
           <div style={{ display: 'grid', placeItems: 'center', height: '60vh' }}>
             <div style={{ ...s.card, width: '350px', textAlign: 'center' }}>
-              <h1 style={{ marginBottom: '25px' }}>WorkLog</h1>
+              <h1>WorkLog</h1>
               <input style={s.input} placeholder="Email" onChange={e => setEmail(e.target.value)} />
               <input style={s.input} type="password" placeholder="Password" onChange={e => setPassword(e.target.value)} />
-              <button style={{...s.btnPrimary, width: '100%'}} onClick={() => handleAuth('login')}>Login</button>
+              <button style={{...s.btnPrimary, width:'100%'}} onClick={() => supabase.auth.signInWithPassword({ email, password })}>Login</button>
             </div>
           </div>
         ) : (
           <div>
             <div style={s.userLabel}>
-              <span>👤 Currently logged as: <strong>{user.email}</strong></span>
+              <span>👤 <strong>{user.email}</strong></span>
               <button onClick={() => supabase.auth.signOut()} style={{ background: '#ef4444', color: 'white', border: 'none', padding: '5px 12px', borderRadius: '5px', cursor: 'pointer' }}>Logout</button>
             </div>
 
@@ -160,7 +150,7 @@ export default function App() {
                 <h2>Admin: All Logs</h2>
                 <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
                   <input type="date" style={s.input} value={dateFilter} onChange={e => setDateFilter(e.target.value)} />
-                  <input type="text" style={s.input} placeholder="Search user email..." value={userSearch} onChange={e => setUserSearch(e.target.value)} />
+                  <input type="text" style={s.input} placeholder="Search email..." value={userSearch} onChange={e => setUserSearch(e.target.value)} />
                 </div>
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
@@ -173,9 +163,7 @@ export default function App() {
                         <td style={s.td}>{rec.date}</td>
                         <td style={s.td}>{new Date(rec.time_in).toLocaleTimeString()}</td>
                         <td style={s.td}>{rec.time_out ? new Date(rec.time_out).toLocaleTimeString() : '--'}</td>
-                        <td style={s.td}>
-                          <button style={s.btnDelete} onClick={() => deleteRecord(rec.id)}>Delete</button>
-                        </td>
+                        <td style={s.td}><button style={s.btnDelete} onClick={() => deleteLog(rec.id)}>Delete</button></td>
                       </tr>
                     ))}
                   </tbody>
@@ -200,10 +188,10 @@ export default function App() {
                         <tr key={log.id}>
                           <td style={s.td}>{log.date}</td>
                           <td style={s.td}>{new Date(log.time_in).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</td>
-                          <td style={s.td}>{log.time_out ? new Date(log.time_out).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : <span style={{color: '#10b981'}}>Active</span>}</td>
+                          <td style={s.td}>{log.time_out ? new Date(log.time_out).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : <span style={{color:'#10b981'}}>Active</span>}</td>
                         </tr>
                       )) : (
-                        <tr><td colSpan="3" style={{...s.td, textAlign: 'center', color: '#94a3b8'}}>No history found for this account.</td></tr>
+                        <tr><td colSpan="3" style={{...s.td, textAlign:'center'}}>No personal history found.</td></tr>
                       )}
                     </tbody>
                   </table>
