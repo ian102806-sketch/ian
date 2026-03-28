@@ -166,7 +166,7 @@ export default function App() {
     };
   }
 
-  function formatDateOnly(dateObj) {
+  function formatLocalDateOnly(dateObj) {
     const year = dateObj.getFullYear();
     const month = String(dateObj.getMonth() + 1).padStart(2, '0');
     const day = String(dateObj.getDate()).padStart(2, '0');
@@ -201,11 +201,9 @@ export default function App() {
     const shiftStart = new Date(d);
     shiftStart.setHours(SHIFT_START_HOUR, 0, 0, 0);
 
-    const isLate = d > shiftStart;
-
     return {
-      text: isLate ? 'Late' : 'On Time',
-      late: isLate
+      text: d > shiftStart ? 'Late' : 'On Time',
+      late: d > shiftStart
     };
   }
 
@@ -216,70 +214,109 @@ export default function App() {
       .eq('user_id', userId)
       .order('time_in', { ascending: false });
 
-    if (!error) {
-      const records = data || [];
-      setLogs(records);
-
-      const active = records.find(function (r) {
-        return !r.time_out;
-      }) || null;
-
-      setOpenRecord(active);
+    if (error) {
+      console.log('fetchAttendance error:', error);
+      return;
     }
+
+    const records = data || [];
+    setLogs(records);
+
+    const active = records.find(function (r) {
+      return r.time_out === null;
+    });
+
+    setOpenRecord(active || null);
   }
 
   async function fetchAllRecords() {
     const { data, error } = await supabase
       .from('attendance')
-      .select(`
-        *,
-        profiles ( email )
-      `)
+      .select('*')
       .order('time_in', { ascending: false });
 
-    if (!error) {
-      setAllRecords(data || []);
+    if (error) {
+      console.log('fetchAllRecords error:', error);
+      return;
     }
+
+    setAllRecords(data || []);
   }
 
   useEffect(function () {
-    supabase.auth.getSession().then(function ({ data: { session } }) {
+    supabase.auth.getSession().then(function (result) {
+      const session = result.data.session;
+
       if (session && session.user) {
         setUser(session.user);
         fetchAttendance(session.user.id);
       }
+
       setLoading(false);
     });
 
-    const { data: authListener } = supabase.auth.onAuthStateChange(function (event, session) {
+    const authData = supabase.auth.onAuthStateChange(function (_event, session) {
       setUser(session ? session.user : null);
 
       if (session && session.user) {
         fetchAttendance(session.user.id);
       } else {
         setLogs([]);
+        setAllRecords([]);
         setOpenRecord(null);
       }
     });
 
     return function () {
-      authListener.subscription.unsubscribe();
+      authData.data.subscription.unsubscribe();
     };
   }, []);
+
+  useEffect(function () {
+    if (user && view === 'admin' && user.email === ADMIN_EMAIL) {
+      fetchAllRecords();
+    }
+  }, [user, view]);
 
   async function handleAttendance() {
     if (!user) return;
 
+    const { data: latestRecords, error: latestError } = await supabase
+      .from('attendance')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('time_in', { ascending: false })
+      .limit(1);
+
+    if (latestError) {
+      alert('Failed to check attendance: ' + latestError.message);
+      return;
+    }
+
     const now = new Date();
     const isoNow = now.toISOString();
-    const today = formatDateOnly(now);
+    const localDate = formatLocalDateOnly(now);
 
-    if (!openRecord) {
+    const latestRecord =
+      latestRecords && latestRecords.length > 0 ? latestRecords[0] : null;
+
+    if (latestRecord && latestRecord.time_out === null) {
+      const { error } = await supabase
+        .from('attendance')
+        .update({ time_out: isoNow })
+        .eq('id', latestRecord.id);
+
+      if (error) {
+        alert('Failed to clock out: ' + error.message);
+        return;
+      }
+    } else {
       const { error } = await supabase.from('attendance').insert([
         {
           user_id: user.id,
-          date: today,
-          time_in: isoNow
+          date: localDate,
+          time_in: isoNow,
+          time_out: null
         }
       ]);
 
@@ -287,22 +324,12 @@ export default function App() {
         alert('Failed to clock in: ' + error.message);
         return;
       }
-    } else {
-      const { error } = await supabase
-        .from('attendance')
-        .update({ time_out: isoNow })
-        .eq('id', openRecord.id);
-
-      if (error) {
-        alert('Failed to clock out: ' + error.message);
-        return;
-      }
     }
 
-    fetchAttendance(user.id);
+    await fetchAttendance(user.id);
 
-    if (isAdmin && view === 'admin') {
-      fetchAllRecords();
+    if (user.email === ADMIN_EMAIL && view === 'admin') {
+      await fetchAllRecords();
     }
   }
 
@@ -347,9 +374,10 @@ export default function App() {
       return;
     }
 
-    fetchAllRecords();
+    await fetchAllRecords();
+
     if (user) {
-      fetchAttendance(user.id);
+      await fetchAttendance(user.id);
     }
   }
 
@@ -398,10 +426,10 @@ export default function App() {
     }
 
     cancelEdit();
-    fetchAllRecords();
+    await fetchAllRecords();
 
     if (user) {
-      fetchAttendance(user.id);
+      await fetchAttendance(user.id);
     }
   }
 
@@ -409,8 +437,10 @@ export default function App() {
 
   const filteredRecords = allRecords.filter(function (r) {
     const matchDate = dateFilter === '' || r.date === dateFilter;
-    const emailValue = (r.profiles && r.profiles.email ? r.profiles.email : '').toLowerCase();
-    const matchUser = userSearch === '' || emailValue.includes(userSearch.toLowerCase());
+    const matchUser =
+      userSearch === '' ||
+      String(r.user_id || '').toLowerCase().includes(userSearch.toLowerCase());
+
     return matchDate && matchUser;
   });
 
@@ -450,6 +480,7 @@ export default function App() {
                 >
                   {authMode === 'login' ? 'Sign In' : 'Register'}
                 </h1>
+
                 <p style={{ color: '#64748b', fontSize: '15px' }}>
                   {authMode === 'login'
                     ? 'Welcome back! Please enter your details.'
@@ -547,9 +578,11 @@ export default function App() {
                 >
                   Current User
                 </span>
+
                 <div style={{ color: '#0f172a', fontWeight: '800', fontSize: '20px' }}>
                   {user.email}
                 </div>
+
                 <div style={{ marginTop: '6px' }}>
                   <span style={badgeStyle('#334155')}>Start Time: 8:00 AM</span>
                 </div>
@@ -570,7 +603,7 @@ export default function App() {
                   My Logs
                 </button>
 
-                {isAdmin && (
+                {isAdmin ? (
                   <button
                     onClick={function () {
                       setView('admin');
@@ -584,7 +617,7 @@ export default function App() {
                   >
                     Admin Panel
                   </button>
-                )}
+                ) : null}
 
                 <button
                   onClick={function () {
@@ -611,10 +644,13 @@ export default function App() {
                 }}
               >
                 <div style={s.card}>
-                  <h3 style={{ marginTop: 0, color: '#0f172a', fontSize: '20px' }}>Punch Clock</h3>
+                  <h3 style={{ marginTop: 0, color: '#0f172a', fontSize: '20px' }}>
+                    Punch Clock
+                  </h3>
+
                   <p style={{ color: '#64748b', fontSize: '14px', marginBottom: '20px' }}>
-                    You can time in and time out multiple times. The system only allows one active
-                    open record at a time.
+                    Employees and admin can clock in and clock out multiple times. Only one
+                    active open record is allowed at a time.
                   </p>
 
                   <div style={{ marginBottom: '20px' }}>
@@ -643,7 +679,10 @@ export default function App() {
                 </div>
 
                 <div style={s.card}>
-                  <h3 style={{ marginTop: 0, color: '#0f172a', fontSize: '20px' }}>My History</h3>
+                  <h3 style={{ marginTop: 0, color: '#0f172a', fontSize: '20px' }}>
+                    My History
+                  </h3>
+
                   <div style={{ overflowX: 'auto' }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                       <thead>
@@ -678,13 +717,13 @@ export default function App() {
                           );
                         })}
 
-                        {logs.length === 0 && (
+                        {logs.length === 0 ? (
                           <tr>
                             <td style={s.td} colSpan={4}>
                               No attendance logs yet.
                             </td>
                           </tr>
-                        )}
+                        ) : null}
                       </tbody>
                     </table>
                   </div>
@@ -708,7 +747,10 @@ export default function App() {
                   <div style={{ flex: 1, minWidth: '220px' }}>
                     <label style={s.label}>Filter Date</label>
                     <input
-                      style={{ ...s.input, marginBottom: 0 }}
+                      style={{
+                        ...s.input,
+                        marginBottom: 0
+                      }}
                       type="date"
                       value={dateFilter}
                       onChange={function (e) {
@@ -718,10 +760,13 @@ export default function App() {
                   </div>
 
                   <div style={{ flex: 2, minWidth: '250px' }}>
-                    <label style={s.label}>Search User Email</label>
+                    <label style={s.label}>Search User ID</label>
                     <input
-                      style={{ ...s.input, marginBottom: 0 }}
-                      placeholder="Search by email..."
+                      style={{
+                        ...s.input,
+                        marginBottom: 0
+                      }}
+                      placeholder="Search by user id..."
                       value={userSearch}
                       onChange={function (e) {
                         setUserSearch(e.target.value);
@@ -734,7 +779,7 @@ export default function App() {
                   <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead>
                       <tr>
-                        <th style={s.tableHeader}>STAFF EMAIL</th>
+                        <th style={s.tableHeader}>USER ID</th>
                         <th style={s.tableHeader}>DATE</th>
                         <th style={s.tableHeader}>TIME IN</th>
                         <th style={s.tableHeader}>TIME OUT</th>
@@ -750,7 +795,7 @@ export default function App() {
                         return (
                           <tr key={rec.id}>
                             <td style={{ ...s.td, fontWeight: '700', color: '#2563eb' }}>
-                              {rec.profiles && rec.profiles.email ? rec.profiles.email : 'N/A'}
+                              {rec.user_id}
                             </td>
 
                             <td style={s.td}>
@@ -808,7 +853,7 @@ export default function App() {
 
                             <td style={s.td}>
                               {isEditing ? (
-                                <>
+                                <span>
                                   <button
                                     style={s.btnSave}
                                     onClick={function () {
@@ -820,9 +865,9 @@ export default function App() {
                                   <button style={s.btnCancel} onClick={cancelEdit}>
                                     Cancel
                                   </button>
-                                </>
+                                </span>
                               ) : (
-                                <>
+                                <span>
                                   <button
                                     style={s.btnEdit}
                                     onClick={function () {
@@ -839,20 +884,20 @@ export default function App() {
                                   >
                                     Delete
                                   </button>
-                                </>
+                                </span>
                               )}
                             </td>
                           </tr>
                         );
                       })}
 
-                      {filteredRecords.length === 0 && (
+                      {filteredRecords.length === 0 ? (
                         <tr>
                           <td style={s.td} colSpan={6}>
                             No records found.
                           </td>
                         </tr>
-                      )}
+                      ) : null}
                     </tbody>
                   </table>
                 </div>
