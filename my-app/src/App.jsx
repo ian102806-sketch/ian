@@ -22,7 +22,9 @@ export default function App() {
   const [editTimeIn, setEditTimeIn] = useState('');
   const [editTimeOut, setEditTimeOut] = useState('');
 
-  const [shiftStart, setShiftStart] = useState('08:00');
+  const [myShiftStart, setMyShiftStart] = useState('08:00');
+  const [shiftEditMap, setShiftEditMap] = useState({});
+
   const ADMIN_EMAIL = 'admin@test.com';
 
   const s = {
@@ -36,7 +38,7 @@ export default function App() {
     },
     wrapper: {
       width: '100%',
-      maxWidth: '1250px',
+      maxWidth: '1350px',
       padding: '40px 20px'
     },
     card: {
@@ -192,23 +194,45 @@ export default function App() {
     return year + '-' + month + '-' + day + 'T' + hours + ':' + mins;
   }
 
-function getLateStatus(dateTimeString) {
-  if (!dateTimeString) {
-    return { text: '--', late: false };
+  function normalizeTimeString(value) {
+    if (!value) return '08:00';
+    return String(value).slice(0, 5);
   }
 
-  const d = new Date(dateTimeString);
+  function getLateStatus(dateTimeString, shiftStartValue) {
+    if (!dateTimeString) {
+      return { text: '--', late: false };
+    }
 
-  const [hour, minute] = shiftStart.split(':').map(Number);
+    const d = new Date(dateTimeString);
+    const safeShift = normalizeTimeString(shiftStartValue || '08:00');
+    const parts = safeShift.split(':');
+    const hour = Number(parts[0]);
+    const minute = Number(parts[1]);
 
-  const shiftStartTime = new Date(d);
-  shiftStartTime.setHours(hour, minute, 0, 0);
+    const shiftStartTime = new Date(d);
+    shiftStartTime.setHours(hour, minute, 0, 0);
 
-  return {
-    text: d > shiftStartTime ? 'Late' : 'On Time',
-    late: d > shiftStartTime
-  };
-}
+    return {
+      text: d > shiftStartTime ? 'Late' : 'On Time',
+      late: d > shiftStartTime
+    };
+  }
+
+  async function fetchMyProfile(userId) {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('shift_start')
+      .eq('id', userId)
+      .single();
+
+    if (error) {
+      console.log('fetchMyProfile error:', error);
+      return;
+    }
+
+    setMyShiftStart(normalizeTimeString(data?.shift_start || '08:00'));
+  }
 
   async function fetchAttendance(userId) {
     const { data, error } = await supabase
@@ -235,7 +259,14 @@ function getLateStatus(dateTimeString) {
   async function fetchAllRecords() {
     const { data, error } = await supabase
       .from('attendance')
-      .select('*')
+      .select(`
+        *,
+        profiles (
+          id,
+          email,
+          shift_start
+        )
+      `)
       .order('time_in', { ascending: false });
 
     if (error) {
@@ -243,30 +274,42 @@ function getLateStatus(dateTimeString) {
       return;
     }
 
-    setAllRecords(data || []);
+    const rows = data || [];
+    setAllRecords(rows);
+
+    const initialShiftMap = {};
+    rows.forEach(function (row) {
+      if (row.profiles?.id && !(row.profiles.id in initialShiftMap)) {
+        initialShiftMap[row.profiles.id] = normalizeTimeString(row.profiles.shift_start || '08:00');
+      }
+    });
+    setShiftEditMap(initialShiftMap);
   }
 
   useEffect(function () {
-    supabase.auth.getSession().then(function (result) {
+    supabase.auth.getSession().then(async function (result) {
       const session = result.data.session;
 
       if (session && session.user) {
         setUser(session.user);
-        fetchAttendance(session.user.id);
+        await fetchAttendance(session.user.id);
+        await fetchMyProfile(session.user.id);
       }
 
       setLoading(false);
     });
 
-    const authData = supabase.auth.onAuthStateChange(function (_event, session) {
+    const authData = supabase.auth.onAuthStateChange(async function (_event, session) {
       setUser(session ? session.user : null);
 
       if (session && session.user) {
-        fetchAttendance(session.user.id);
+        await fetchAttendance(session.user.id);
+        await fetchMyProfile(session.user.id);
       } else {
         setLogs([]);
         setAllRecords([]);
         setOpenRecord(null);
+        setMyShiftStart('08:00');
       }
     });
 
@@ -436,13 +479,39 @@ function getLateStatus(dateTimeString) {
     }
   }
 
+  async function saveUserShiftStart(profileId) {
+    const shiftValue = shiftEditMap[profileId] || '08:00';
+
+    const { error } = await supabase
+      .from('profiles')
+      .update({ shift_start: shiftValue })
+      .eq('id', profileId);
+
+    if (error) {
+      alert('Failed to update shift start: ' + error.message);
+      return;
+    }
+
+    alert('Shift start updated.');
+    await fetchAllRecords();
+
+    if (user && user.id === profileId) {
+      setMyShiftStart(shiftValue);
+    }
+  }
+
   const isAdmin = user && user.email === ADMIN_EMAIL;
 
   const filteredRecords = allRecords.filter(function (r) {
     const matchDate = dateFilter === '' || r.date === dateFilter;
+    const emailValue = String(r.profiles?.email || '').toLowerCase();
+    const userIdValue = String(r.user_id || '').toLowerCase();
+    const searchValue = userSearch.toLowerCase();
+
     const matchUser =
       userSearch === '' ||
-      String(r.user_id || '').toLowerCase().includes(userSearch.toLowerCase());
+      emailValue.includes(searchValue) ||
+      userIdValue.includes(searchValue);
 
     return matchDate && matchUser;
   });
@@ -587,7 +656,9 @@ function getLateStatus(dateTimeString) {
                 </div>
 
                 <div style={{ marginTop: '6px' }}>
-                  <span style={badgeStyle('#334155')}>  Start Time: {shiftStart}</span>
+                  <span style={badgeStyle('#334155')}>
+                    Start Time: {myShiftStart}
+                  </span>
                 </div>
               </div>
 
@@ -698,7 +769,7 @@ function getLateStatus(dateTimeString) {
                       </thead>
                       <tbody>
                         {logs.map(function (log) {
-                          const status = getLateStatus(log.time_in);
+                          const status = getLateStatus(log.time_in, myShiftStart);
 
                           return (
                             <tr key={log.id}>
@@ -732,42 +803,38 @@ function getLateStatus(dateTimeString) {
                   </div>
                 </div>
               </div>
-          ) : (
-  <div style={s.card}>
-    <h2 style={{ marginTop: 0, color: '#0f172a' }}>
-      Staff Attendance Logs
-    </h2>
+            ) : (
+              <div style={s.card}>
+                <h2 style={{ marginTop: 0, color: '#0f172a' }}>Staff Attendance Logs</h2>
 
-    {/* ✅ ADD THIS HERE */}
-    <div style={{ marginBottom: '20px' }}>
-      <label style={s.label}>Shift Start Time</label>
-      <input
-        type="time"
-        value={shiftStart}
-        onChange={(e) => setShiftStart(e.target.value)}
-        style={{ ...s.input, maxWidth: '200px' }}
-      />
-    </div>
-
-    {/* EXISTING FILTERS (DON'T TOUCH) */}
-    <div style={{
-      display: 'flex',
-      gap: '16px',
-      marginBottom: '24px',
-      background: '#f8fafc',
-      padding: '20px',
-      borderRadius: '12px',
-      flexWrap: 'wrap'
-    }}>
+                <div
+                  style={{
+                    display: 'flex',
+                    gap: '16px',
+                    marginBottom: '24px',
+                    background: '#f8fafc',
+                    padding: '20px',
+                    borderRadius: '12px',
+                    flexWrap: 'wrap'
+                  }}
+                >
+                  <div style={{ flex: 1, minWidth: '220px' }}>
+                    <label style={s.label}>Filter Date</label>
+                    <input
+                      style={{ ...s.input, marginBottom: 0 }}
+                      type="date"
+                      value={dateFilter}
+                      onChange={function (e) {
+                        setDateFilter(e.target.value);
+                      }}
+                    />
+                  </div>
 
                   <div style={{ flex: 2, minWidth: '250px' }}>
-                    <label style={s.label}>Search User ID</label>
+                    <label style={s.label}>Search User Email / ID</label>
                     <input
-                      style={{
-                        ...s.input,
-                        marginBottom: 0
-                      }}
-                      placeholder="Search by user id..."
+                      style={{ ...s.input, marginBottom: 0 }}
+                      placeholder="Search by email or user id..."
                       value={userSearch}
                       onChange={function (e) {
                         setUserSearch(e.target.value);
@@ -780,7 +847,9 @@ function getLateStatus(dateTimeString) {
                   <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead>
                       <tr>
+                        <th style={s.tableHeader}>EMAIL</th>
                         <th style={s.tableHeader}>USER ID</th>
+                        <th style={s.tableHeader}>SHIFT START</th>
                         <th style={s.tableHeader}>DATE</th>
                         <th style={s.tableHeader}>TIME IN</th>
                         <th style={s.tableHeader}>TIME OUT</th>
@@ -790,13 +859,50 @@ function getLateStatus(dateTimeString) {
                     </thead>
                     <tbody>
                       {filteredRecords.map(function (rec) {
-                        const status = getLateStatus(rec.time_in);
                         const isEditing = editingId === rec.id;
+                        const profileId = rec.profiles?.id;
+                        const shiftValue = profileId
+                          ? (shiftEditMap[profileId] || normalizeTimeString(rec.profiles?.shift_start || '08:00'))
+                          : '08:00';
+
+                        const status = getLateStatus(rec.time_in, shiftValue);
 
                         return (
                           <tr key={rec.id}>
                             <td style={{ ...s.td, fontWeight: '700', color: '#2563eb' }}>
-                              {rec.user_id}
+                              {rec.profiles?.email || 'N/A'}
+                            </td>
+
+                            <td style={s.td}>{rec.user_id}</td>
+
+                            <td style={s.td}>
+                              {profileId ? (
+                                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', minWidth: '180px' }}>
+                                  <input
+                                    type="time"
+                                    value={shiftValue}
+                                    onChange={function (e) {
+                                      setShiftEditMap(function (prev) {
+                                        return {
+                                          ...prev,
+                                          [profileId]: e.target.value
+                                        };
+                                      });
+                                    }}
+                                    style={{ ...s.smallInput, marginBottom: 0 }}
+                                  />
+                                  <button
+                                    style={s.btnSave}
+                                    onClick={function () {
+                                      saveUserShiftStart(profileId);
+                                    }}
+                                  >
+                                    Save
+                                  </button>
+                                </div>
+                              ) : (
+                                '--'
+                              )}
                             </td>
 
                             <td style={s.td}>
@@ -894,7 +1000,7 @@ function getLateStatus(dateTimeString) {
 
                       {filteredRecords.length === 0 ? (
                         <tr>
-                          <td style={s.td} colSpan={6}>
+                          <td style={s.td} colSpan={8}>
                             No records found.
                           </td>
                         </tr>
