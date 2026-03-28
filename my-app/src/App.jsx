@@ -23,6 +23,7 @@ export default function App() {
   const [editTimeOut, setEditTimeOut] = useState('');
 
   const [myShiftStart, setMyShiftStart] = useState('08:00');
+  const [profileMap, setProfileMap] = useState({});
   const [shiftEditMap, setShiftEditMap] = useState({});
 
   const ADMIN_EMAIL = 'admin@test.com';
@@ -38,7 +39,7 @@ export default function App() {
     },
     wrapper: {
       width: '100%',
-      maxWidth: '1350px',
+      maxWidth: '1400px',
       padding: '40px 20px'
     },
     card: {
@@ -219,19 +220,91 @@ export default function App() {
     };
   }
 
+  async function ensureProfileRow(currentUser) {
+    if (!currentUser) return;
+
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('id, email, shift_start')
+      .eq('id', currentUser.id)
+      .maybeSingle();
+
+    if (error) {
+      console.log('ensureProfileRow select error:', error);
+      return;
+    }
+
+    if (!data) {
+      const { error: insertError } = await supabase.from('profiles').insert([
+        {
+          id: currentUser.id,
+          email: currentUser.email,
+          shift_start: '08:00:00'
+        }
+      ]);
+
+      if (insertError) {
+        console.log('ensureProfileRow insert error:', insertError);
+      }
+    }
+  }
+
   async function fetchMyProfile(userId) {
     const { data, error } = await supabase
       .from('profiles')
-      .select('shift_start')
+      .select('id, email, shift_start')
       .eq('id', userId)
-      .single();
+      .maybeSingle();
 
     if (error) {
       console.log('fetchMyProfile error:', error);
       return;
     }
 
-    setMyShiftStart(normalizeTimeString(data?.shift_start || '08:00'));
+    if (data) {
+      setMyShiftStart(normalizeTimeString(data.shift_start || '08:00'));
+      setProfileMap(function (prev) {
+        return {
+          ...prev,
+          [userId]: {
+            id: data.id,
+            email: data.email,
+            shift_start: normalizeTimeString(data.shift_start || '08:00')
+          }
+        };
+      });
+    } else {
+      setMyShiftStart('08:00');
+    }
+  }
+
+  async function fetchProfilesForUsers(userIds) {
+    if (!userIds || userIds.length === 0) {
+      return {};
+    }
+
+    const uniqueIds = Array.from(new Set(userIds.filter(Boolean)));
+
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('id, email, shift_start')
+      .in('id', uniqueIds);
+
+    if (error) {
+      console.log('fetchProfilesForUsers error:', error);
+      return {};
+    }
+
+    const map = {};
+    (data || []).forEach(function (profile) {
+      map[profile.id] = {
+        id: profile.id,
+        email: profile.email,
+        shift_start: normalizeTimeString(profile.shift_start || '08:00')
+      };
+    });
+
+    return map;
   }
 
   async function fetchAttendance(userId) {
@@ -259,14 +332,7 @@ export default function App() {
   async function fetchAllRecords() {
     const { data, error } = await supabase
       .from('attendance')
-      .select(`
-        *,
-        profiles (
-          id,
-          email,
-          shift_start
-        )
-      `)
+      .select('*')
       .order('time_in', { ascending: false });
 
     if (error) {
@@ -277,13 +343,27 @@ export default function App() {
     const rows = data || [];
     setAllRecords(rows);
 
-    const initialShiftMap = {};
-    rows.forEach(function (row) {
-      if (row.profiles?.id && !(row.profiles.id in initialShiftMap)) {
-        initialShiftMap[row.profiles.id] = normalizeTimeString(row.profiles.shift_start || '08:00');
-      }
+    const userIds = rows.map(function (row) {
+      return row.user_id;
     });
-    setShiftEditMap(initialShiftMap);
+
+    const fetchedProfiles = await fetchProfilesForUsers(userIds);
+
+    setProfileMap(function (prev) {
+      return {
+        ...prev,
+        ...fetchedProfiles
+      };
+    });
+
+    const nextShiftEditMap = {};
+    rows.forEach(function (row) {
+      const profile = fetchedProfiles[row.user_id];
+      nextShiftEditMap[row.user_id] = normalizeTimeString(
+        profile ? profile.shift_start : '08:00'
+      );
+    });
+    setShiftEditMap(nextShiftEditMap);
   }
 
   useEffect(function () {
@@ -292,6 +372,7 @@ export default function App() {
 
       if (session && session.user) {
         setUser(session.user);
+        await ensureProfileRow(session.user);
         await fetchAttendance(session.user.id);
         await fetchMyProfile(session.user.id);
       }
@@ -303,6 +384,7 @@ export default function App() {
       setUser(session ? session.user : null);
 
       if (session && session.user) {
+        await ensureProfileRow(session.user);
         await fetchAttendance(session.user.id);
         await fetchMyProfile(session.user.id);
       } else {
@@ -310,6 +392,8 @@ export default function App() {
         setAllRecords([]);
         setOpenRecord(null);
         setMyShiftStart('08:00');
+        setProfileMap({});
+        setShiftEditMap({});
       }
     });
 
@@ -482,29 +566,59 @@ export default function App() {
   async function saveUserShiftStart(profileId) {
     const shiftValue = shiftEditMap[profileId] || '08:00';
 
-    const { error } = await supabase
-      .from('profiles')
-      .update({ shift_start: shiftValue })
-      .eq('id', profileId);
+    const existingProfile = profileMap[profileId];
 
-    if (error) {
-      alert('Failed to update shift start: ' + error.message);
-      return;
+    if (!existingProfile) {
+      const { error: insertError } = await supabase.from('profiles').upsert([
+        {
+          id: profileId,
+          email: '',
+          shift_start: shiftValue + ':00'
+        }
+      ]);
+
+      if (insertError) {
+        alert('Failed to create shift profile: ' + insertError.message);
+        return;
+      }
+    } else {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ shift_start: shiftValue + ':00' })
+        .eq('id', profileId);
+
+      if (error) {
+        alert('Failed to update shift start: ' + error.message);
+        return;
+      }
     }
 
-    alert('Shift start updated.');
-    await fetchAllRecords();
+    setProfileMap(function (prev) {
+      return {
+        ...prev,
+        [profileId]: {
+          ...(prev[profileId] || {}),
+          id: profileId,
+          email: prev[profileId]?.email || '',
+          shift_start: shiftValue
+        }
+      };
+    });
 
     if (user && user.id === profileId) {
       setMyShiftStart(shiftValue);
     }
+
+    alert('Shift start updated.');
+    await fetchAllRecords();
   }
 
   const isAdmin = user && user.email === ADMIN_EMAIL;
 
   const filteredRecords = allRecords.filter(function (r) {
     const matchDate = dateFilter === '' || r.date === dateFilter;
-    const emailValue = String(r.profiles?.email || '').toLowerCase();
+    const profile = profileMap[r.user_id];
+    const emailValue = String(profile?.email || '').toLowerCase();
     const userIdValue = String(r.user_id || '').toLowerCase();
     const searchValue = userSearch.toLowerCase();
 
@@ -860,49 +974,42 @@ export default function App() {
                     <tbody>
                       {filteredRecords.map(function (rec) {
                         const isEditing = editingId === rec.id;
-                        const profileId = rec.profiles?.id;
-                        const shiftValue = profileId
-                          ? (shiftEditMap[profileId] || normalizeTimeString(rec.profiles?.shift_start || '08:00'))
-                          : '08:00';
-
+                        const profile = profileMap[rec.user_id];
+                        const shiftValue = shiftEditMap[rec.user_id] || normalizeTimeString(profile?.shift_start || '08:00');
                         const status = getLateStatus(rec.time_in, shiftValue);
 
                         return (
                           <tr key={rec.id}>
                             <td style={{ ...s.td, fontWeight: '700', color: '#2563eb' }}>
-                              {rec.profiles?.email || 'N/A'}
+                              {profile?.email || 'N/A'}
                             </td>
 
                             <td style={s.td}>{rec.user_id}</td>
 
                             <td style={s.td}>
-                              {profileId ? (
-                                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', minWidth: '180px' }}>
-                                  <input
-                                    type="time"
-                                    value={shiftValue}
-                                    onChange={function (e) {
-                                      setShiftEditMap(function (prev) {
-                                        return {
-                                          ...prev,
-                                          [profileId]: e.target.value
-                                        };
-                                      });
-                                    }}
-                                    style={{ ...s.smallInput, marginBottom: 0 }}
-                                  />
-                                  <button
-                                    style={s.btnSave}
-                                    onClick={function () {
-                                      saveUserShiftStart(profileId);
-                                    }}
-                                  >
-                                    Save
-                                  </button>
-                                </div>
-                              ) : (
-                                '--'
-                              )}
+                              <div style={{ display: 'flex', gap: '8px', alignItems: 'center', minWidth: '180px' }}>
+                                <input
+                                  type="time"
+                                  value={shiftValue}
+                                  onChange={function (e) {
+                                    setShiftEditMap(function (prev) {
+                                      return {
+                                        ...prev,
+                                        [rec.user_id]: e.target.value
+                                      };
+                                    });
+                                  }}
+                                  style={{ ...s.smallInput, marginBottom: 0 }}
+                                />
+                                <button
+                                  style={s.btnSave}
+                                  onClick={function () {
+                                    saveUserShiftStart(rec.user_id);
+                                  }}
+                                >
+                                  Save
+                                </button>
+                              </div>
                             </td>
 
                             <td style={s.td}>
