@@ -238,7 +238,7 @@ export default function App() {
       const { error: insertError } = await supabase.from('profiles').insert([
         {
           id: currentUser.id,
-          email: currentUser.email,
+          email: currentUser.email || '',
           shift_start: '08:00:00'
         }
       ]);
@@ -258,6 +258,7 @@ export default function App() {
 
     if (error) {
       console.log('fetchMyProfile error:', error);
+      setMyShiftStart('08:00');
       return;
     }
 
@@ -337,6 +338,7 @@ export default function App() {
 
     if (error) {
       console.log('fetchAllRecords error:', error);
+      setAllRecords([]);
       return;
     }
 
@@ -347,46 +349,74 @@ export default function App() {
       return row.user_id;
     });
 
-    const fetchedProfiles = await fetchProfilesForUsers(userIds);
+    try {
+      const fetchedProfiles = await fetchProfilesForUsers(userIds);
 
-    setProfileMap(function (prev) {
-      return {
-        ...prev,
-        ...fetchedProfiles
-      };
-    });
+      setProfileMap(function (prev) {
+        return {
+          ...prev,
+          ...fetchedProfiles
+        };
+      });
 
-    const nextShiftEditMap = {};
-    rows.forEach(function (row) {
-      const profile = fetchedProfiles[row.user_id];
-      nextShiftEditMap[row.user_id] = normalizeTimeString(
-        profile ? profile.shift_start : '08:00'
-      );
-    });
-    setShiftEditMap(nextShiftEditMap);
+      const nextShiftEditMap = {};
+      rows.forEach(function (row) {
+        const profile = fetchedProfiles[row.user_id];
+        nextShiftEditMap[row.user_id] = normalizeTimeString(
+          profile ? profile.shift_start : '08:00'
+        );
+      });
+      setShiftEditMap(nextShiftEditMap);
+    } catch (profileError) {
+      console.log('fetchProfilesForUsers error:', profileError);
+    }
   }
 
   useEffect(function () {
-    supabase.auth.getSession().then(async function (result) {
-      const session = result.data.session;
+    supabase.auth
+      .getSession()
+      .then(function (result) {
+        const session = result.data.session;
 
-      if (session && session.user) {
-        setUser(session.user);
-        await ensureProfileRow(session.user);
-        await fetchAttendance(session.user.id);
-        await fetchMyProfile(session.user.id);
-      }
+        if (session && session.user) {
+          setUser(session.user);
 
-      setLoading(false);
-    });
+          ensureProfileRow(session.user).catch(function (error) {
+            console.log('ensureProfileRow startup error:', error);
+          });
 
-    const authData = supabase.auth.onAuthStateChange(async function (_event, session) {
+          fetchAttendance(session.user.id).catch(function (error) {
+            console.log('fetchAttendance startup error:', error);
+          });
+
+          fetchMyProfile(session.user.id).catch(function (error) {
+            console.log('fetchMyProfile startup error:', error);
+          });
+        }
+
+        setLoading(false);
+      })
+      .catch(function (error) {
+        console.log('getSession error:', error);
+        setLoading(false);
+      });
+
+    const authData = supabase.auth.onAuthStateChange(function (_event, session) {
       setUser(session ? session.user : null);
+      setLoading(false);
 
       if (session && session.user) {
-        await ensureProfileRow(session.user);
-        await fetchAttendance(session.user.id);
-        await fetchMyProfile(session.user.id);
+        ensureProfileRow(session.user).catch(function (error) {
+          console.log('ensureProfileRow auth error:', error);
+        });
+
+        fetchAttendance(session.user.id).catch(function (error) {
+          console.log('fetchAttendance auth error:', error);
+        });
+
+        fetchMyProfile(session.user.id).catch(function (error) {
+          console.log('fetchMyProfile auth error:', error);
+        });
       } else {
         setLogs([]);
         setAllRecords([]);
@@ -565,7 +595,6 @@ export default function App() {
 
   async function saveUserShiftStart(profileId) {
     const shiftValue = shiftEditMap[profileId] || '08:00';
-
     const existingProfile = profileMap[profileId];
 
     if (!existingProfile) {
@@ -975,7 +1004,9 @@ export default function App() {
                       {filteredRecords.map(function (rec) {
                         const isEditing = editingId === rec.id;
                         const profile = profileMap[rec.user_id];
-                        const shiftValue = shiftEditMap[rec.user_id] || normalizeTimeString(profile?.shift_start || '08:00');
+                        const shiftValue =
+                          shiftEditMap[rec.user_id] ||
+                          normalizeTimeString(profile?.shift_start || '08:00');
                         const status = getLateStatus(rec.time_in, shiftValue);
 
                         return (
@@ -987,7 +1018,14 @@ export default function App() {
                             <td style={s.td}>{rec.user_id}</td>
 
                             <td style={s.td}>
-                              <div style={{ display: 'flex', gap: '8px', alignItems: 'center', minWidth: '180px' }}>
+                              <div
+                                style={{
+                                  display: 'flex',
+                                  gap: '8px',
+                                  alignItems: 'center',
+                                  minWidth: '180px'
+                                }}
+                              >
                                 <input
                                   type="time"
                                   value={shiftValue}
