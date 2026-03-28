@@ -22,7 +22,7 @@ export default function App() {
   const [editTimeIn, setEditTimeIn] = useState('');
   const [editTimeOut, setEditTimeOut] = useState('');
 
-  const SHIFT_START_HOUR = 8;
+  const [shiftStart, setShiftStart] = useState('08:00');
   const ADMIN_EMAIL = 'admin@test.com';
 
   const s = {
@@ -192,20 +192,23 @@ export default function App() {
     return year + '-' + month + '-' + day + 'T' + hours + ':' + mins;
   }
 
-  function getLateStatus(dateTimeString) {
-    if (!dateTimeString) {
-      return { text: '--', late: false };
-    }
-
-    const d = new Date(dateTimeString);
-    const shiftStart = new Date(d);
-    shiftStart.setHours(SHIFT_START_HOUR, 0, 0, 0);
-
-    return {
-      text: d > shiftStart ? 'Late' : 'On Time',
-      late: d > shiftStart
-    };
+function getLateStatus(dateTimeString) {
+  if (!dateTimeString) {
+    return { text: '--', late: false };
   }
+
+  const d = new Date(dateTimeString);
+
+  const [hour, minute] = shiftStart.split(':').map(Number);
+
+  const shiftStartTime = new Date(d);
+  shiftStartTime.setHours(hour, minute, 0, 0);
+
+  return {
+    text: d > shiftStartTime ? 'Late' : 'On Time',
+    late: d > shiftStartTime
+  };
+}
 
   async function fetchAttendance(userId) {
     const { data, error } = await supabase
@@ -584,7 +587,7 @@ export default function App() {
                 </div>
 
                 <div style={{ marginTop: '6px' }}>
-                  <span style={badgeStyle('#334155')}>Start Time: 8:00 AM</span>
+                  <span style={badgeStyle('#334155')}>  Start Time: {shiftStart}</span>
                 </div>
               </div>
 
@@ -729,35 +732,33 @@ export default function App() {
                   </div>
                 </div>
               </div>
-            ) : (
-              <div style={s.card}>
-                <h2 style={{ marginTop: 0, color: '#0f172a' }}>Staff Attendance Logs</h2>
+          ) : (
+  <div style={s.card}>
+    <h2 style={{ marginTop: 0, color: '#0f172a' }}>
+      Staff Attendance Logs
+    </h2>
 
-                <div
-                  style={{
-                    display: 'flex',
-                    gap: '16px',
-                    marginBottom: '24px',
-                    background: '#f8fafc',
-                    padding: '20px',
-                    borderRadius: '12px',
-                    flexWrap: 'wrap'
-                  }}
-                >
-                  <div style={{ flex: 1, minWidth: '220px' }}>
-                    <label style={s.label}>Filter Date</label>
-                    <input
-                      style={{
-                        ...s.input,
-                        marginBottom: 0
-                      }}
-                      type="date"
-                      value={dateFilter}
-                      onChange={function (e) {
-                        setDateFilter(e.target.value);
-                      }}
-                    />
-                  </div>
+    {/* ✅ ADD THIS HERE */}
+    <div style={{ marginBottom: '20px' }}>
+      <label style={s.label}>Shift Start Time</label>
+      <input
+        type="time"
+        value={shiftStart}
+        onChange={(e) => setShiftStart(e.target.value)}
+        style={{ ...s.input, maxWidth: '200px' }}
+      />
+    </div>
+
+    {/* EXISTING FILTERS (DON'T TOUCH) */}
+    <div style={{
+      display: 'flex',
+      gap: '16px',
+      marginBottom: '24px',
+      background: '#f8fafc',
+      padding: '20px',
+      borderRadius: '12px',
+      flexWrap: 'wrap'
+    }}>
 
                   <div style={{ flex: 2, minWidth: '250px' }}>
                     <label style={s.label}>Search User ID</label>
